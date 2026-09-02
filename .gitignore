@@ -1,0 +1,6 @@
+node_modules/
+lab/.env
+*.log
+.DS_Store
+docs/superpowers/
+.superpowers/
