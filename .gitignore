@@ -4,3 +4,5 @@ lab/.env
 .DS_Store
 docs/superpowers/
 .superpowers/
+__pycache__/
+*.pyc

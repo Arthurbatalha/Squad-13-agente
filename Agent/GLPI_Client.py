@@ -23,8 +23,8 @@ class GLPIClient:
         if method != 'GET':
             header['Content-type'] = 'application/json'
 
-        return header 
-    
+        return header
+
     #Metodo para a coleta de chamados
     def all_call_search(self, endpoint, start=0, limit=25):
         all_calls = []
@@ -43,7 +43,9 @@ class GLPIClient:
             if 199 < response.status_code < 300:
                 pass
             else:
-                raise Exception("Erro de paginação, algo deu errado")
+              print("STATUS:", response.status_code)
+              print("RESPOSTA:", response.text)
+              raise Exception("Erro de paginação, algo deu errado")
 
             calls_frag = response.json()
 
@@ -56,14 +58,22 @@ class GLPIClient:
                 break
 
         return all_calls
-     
+
     pass
 
 #Depuração e Edge Case
 if __name__ == "__main__":
 
     client = GLPIClient(access_token=fazer_login(client_id, client_secret)["access_token"])
-    calls = client.all_call_search(limit=350)
+    artigos = client.all_call_search(
+    "/Knowledgebase/Article",
+    limit=25
+)
 
-    print(f'total de chamados: {len(calls)}')
-    print(f'{calls[0]}')
+    print(f"total de artigos: {len(artigos)}")
+
+    for artigo in artigos:
+        print(
+            f"ID: {artigo['id']} | "
+            f"Título: {artigo['name']}"
+        )
