@@ -1,5 +1,7 @@
 import sys
+import json
 from pathlib import Path
+
 
 RAIZ_PROJETO = Path(__file__).resolve().parent.parent
 PASTA_AGENT = RAIZ_PROJETO / "Agent"
@@ -32,6 +34,9 @@ def extrair_artigos():
     
     artigos_limpos = []
     for artigo in artigos:
-        busca = {"id": artigo["id"], "titulo": artigo["name"],}
-    
+        busca = {"id": artigo["id"], "titulo": artigo["name"], "content_html": artigo["content"], "content_texto": remover_html(artigo["content"])}
+        artigos_limpos.append(busca) #guarda a busca 
+        
+    CAMINHO_SAIDA.parent.mkdir(parents=True, exist_ok=True)   
 if __name__ == "__main__":
+    artigos = extrair_artigos()
