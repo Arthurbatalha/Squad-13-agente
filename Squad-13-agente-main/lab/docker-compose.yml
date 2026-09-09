@@ -1,0 +1,43 @@
+services:
+  db:
+    # Imagem fixada por digest, não só por tag — mesma razão da imagem base
+    # do GLPI no Dockerfile: uma tag móvel pode mudar no meio do semestre e
+    # produzir ambientes divergentes entre turmas.
+    image: mariadb@sha256:de61fed4a40d3842f3ee09944ba52792156cfd9adf489b2cc670fc6ded28df8d
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: glpi
+      MARIADB_USER: glpi
+      MARIADB_PASSWORD: glpi
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./seed.sql:/docker-entrypoint-initdb.d/01-seed.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  glpi:
+    build:
+      context: .
+      args:
+        GLPI_VERSION: ${GLPI_VERSION:-11.0.8}
+    ports:
+      - "${GLPI_PORT:-8080}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - glpi-files:/var/www/glpi/files
+      - ./glpicrypt.key:/var/www/glpi/config/glpicrypt.key
+      - ./config_db.php:/var/www/glpi/config/config_db.php
+      - ./oauth.pem:/var/www/glpi/config/oauth.pem
+      - ./oauth.pub:/var/www/glpi/config/oauth.pub
+
+volumes:
+  db-data:
+  glpi-files:

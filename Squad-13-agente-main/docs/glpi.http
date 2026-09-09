@@ -1,0 +1,141 @@
+### Coleção de requisições do laboratório GLPI
+#
+# Este arquivo é a única "muleta" técnica que você recebe neste kit: ele
+# destrava a autenticação e mostra o formato das respostas da API, mas não
+# contém nenhuma lógica do seu agente. Isso é com você.
+#
+# Como rodar cada bloco:
+# - VS Code com a extensão "REST Client" (humao.rest-client): abra este
+#   arquivo e clique em "Send Request", que aparece acima de cada bloco
+#   (linha que começa com "###"). É o editor para o qual este arquivo foi
+#   escrito — a sintaxe de variáveis abaixo (por exemplo
+#   "{{token.response.body.access_token}}") só funciona nele.
+# - Se você usa outro editor (Bruno, IntelliJ HTTP Client, Insomnia,
+#   Postman...) essa sintaxe de encadeamento automático provavelmente não
+#   existe do mesmo jeito. O caminho mais simples é rodar o Bloco 1 à parte
+#   (com curl, ou colando no seu cliente), copiar o "access_token" da
+#   resposta na mão, e colar como valor fixo de @bearer logo abaixo — depois
+#   repetir isso sempre que o token expirar (1 hora).
+#
+# IMPORTANTE: rode o Bloco 1 antes de qualquer outro. Todos os blocos de 2
+# a 10 dependem do token que ele devolve (a variável @bearer é montada a
+# partir da resposta do Bloco 1). Sem isso, todas as chamadas seguintes
+# voltam 401.
+
+@base = http://localhost:8080
+@clientId = 92e1a8497a5136e410301a573b8282bb
+@clientSecret = 156df3c0f488cd8be63a5ee3731568da3afa60239bed1018c8cec9f4c5355c17
+
+### 1. Obter o token (rode este primeiro — os demais blocos dependem dele)
+# O GLPI usa OAuth2 com grant "password": você troca usuário e senha (mais
+# as credenciais do cliente OAuth do laboratório) por um access_token.
+# "# @name token" é o que permite ao REST Client guardar esta resposta e
+# reaproveitá-la nos blocos seguintes.
+# @name token
+POST {{base}}/api.php/token
+Content-Type: application/json
+
+{
+  "grant_type": "password",
+  "client_id": "{{clientId}}",
+  "client_secret": "{{clientSecret}}",
+  "username": "glpi",
+  "password": "glpi",
+  "scope": "api"
+}
+
+### 2. Quem sou eu
+# @bearer lê o campo "access_token" do corpo da resposta do Bloco 1. Essa
+# variável é reaproveitada em todos os blocos abaixo — não precisa copiar o
+# token à mão se você estiver usando o REST Client.
+@bearer = {{token.response.body.access_token}}
+
+GET {{base}}/api.php/v2/session
+Authorization: Bearer {{bearer}}
+
+### 3. Listar chamados
+# Paginação nesta versão do GLPI é por "start" e "limit" (não por "range",
+# que é ignorado). Com 300 chamados na base, esta fatia de 10 cobre só uma
+# parte — por isso a resposta esperada é 206 Partial Content, com o header
+# Content-Range indicando quanto falta (ex.: "0-9/300"). Trate qualquer
+# código 2xx como sucesso: 206 aqui é o comportamento normal, não um erro.
+# Não existe filtro por status/categoria nesta API: qualquer "?filter=" ou
+# "?status=" é ignorado (ou dá erro, com colchetes) e você recebe a
+# listagem inteira de qualquer forma — pagine tudo e filtre no seu código.
+GET {{base}}/api.php/v2/Assistance/Ticket?start=0&limit=10
+Authorization: Bearer {{bearer}}
+
+### 4. Detalhe de um chamado
+# Repare nos dois campos de data: "date" é a data real de abertura do
+# chamado; "date_creation" é só o instante em que o registro foi gravado
+# no banco (no laboratório, o momento em que o seed rodou) e não serve
+# para nenhuma pergunta sobre "quando" o chamado foi aberto.
+GET {{base}}/api.php/v2/Assistance/Ticket/1
+Authorization: Bearer {{bearer}}
+
+### 5. Timeline do chamado — é aqui que estão os comentários e a solução
+# Não existe /Ticket/{id}/Followup na v2. A lista de comentários,
+# atribuições e soluções de um chamado vem toda junta neste endpoint.
+GET {{base}}/api.php/v2/Assistance/Ticket/1/Timeline
+Authorization: Bearer {{bearer}}
+
+### 6. Listar artigos da base de conhecimento
+# A rota é /Knowledgebase/Article (não /KnowbaseItem, que não existe nesta
+# versão). Mesma regra de paginação do Bloco 3: start/limit, não range.
+GET {{base}}/api.php/v2/Knowledgebase/Article?start=0&limit=10
+Authorization: Bearer {{bearer}}
+
+### 7. Detalhe de um artigo — o campo de conteúdo é "content", não "answer"
+# "content" vem em HTML (parágrafos, listas etc.). Se o seu agente for
+# indexar esse texto, você provavelmente vai querer converter para texto
+# puro antes.
+GET {{base}}/api.php/v2/Knowledgebase/Article/1
+Authorization: Bearer {{bearer}}
+
+### 8. Renovar o token (ele expira em 1 hora)
+# Um agente de verdade roda por mais de uma hora, então precisa saber pedir
+# um token novo usando o refresh_token em vez de repetir usuário e senha.
+# Atenção: pedir um novo token invalida o access_token anterior — depois de
+# rodar este bloco, o @bearer montado a partir do Bloco 1 deixa de
+# funcionar, então rode o Bloco 1 de novo se quiser continuar testando os
+# blocos seguintes nesta mesma sessão.
+POST {{base}}/api.php/token
+Content-Type: application/json
+
+{
+  "grant_type": "refresh_token",
+  "refresh_token": "{{token.response.body.refresh_token}}",
+  "client_id": "{{clientId}}",
+  "client_secret": "{{clientSecret}}"
+}
+
+### 9. Criar chamado
+# Corpo achatado, sem envelope "input" (isso mudou entre versões do GLPI).
+# Sucesso aqui é 201 Created, com o id do chamado criado no corpo.
+# Atenção: isto grava de verdade no banco do laboratório. Se você rodar
+# este bloco para testar, depois restaure o lab com
+# "docker compose down -v && docker compose up -d" dentro de lab/ para
+# voltar aos 300 chamados originais — o corpus vem do seed.sql e recriar o
+# ambiente é rápido.
+POST {{base}}/api.php/v2/Assistance/Ticket
+Authorization: Bearer {{bearer}}
+Content-Type: application/json
+
+{
+  "name": "Teste do meu agente",
+  "content": "<p>Chamado criado pela API durante o desenvolvimento.</p>",
+  "priority": 3
+}
+
+### 10. Comentar num chamado
+# Sub-recurso de escrita: /Timeline/Followup. O endpoint /Timeline sozinho
+# (Bloco 5) é só leitura. Sucesso é 201 Created.
+# Mesmo aviso do Bloco 9: isto cria um registro de verdade — restaure o lab
+# depois de testar, se quiser deixá-lo limpo para outra pessoa usar.
+POST {{base}}/api.php/v2/Assistance/Ticket/1/Timeline/Followup
+Authorization: Bearer {{bearer}}
+Content-Type: application/json
+
+{
+  "content": "<p>Acompanhamento adicionado pelo agente.</p>"
+}
