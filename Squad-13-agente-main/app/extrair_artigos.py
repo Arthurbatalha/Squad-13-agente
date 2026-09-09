@@ -35,8 +35,11 @@ def extrair_artigos():
     artigos_limpos = []
     for artigo in artigos:
         busca = {"id": artigo["id"], "titulo": artigo["name"], "content_html": artigo["content"], "content_texto": remover_html(artigo["content"])}
-        artigos_limpos.append(busca) #guarda a busca 
-        
+        artigos_limpos.append(busca) #guarda a busca       
     CAMINHO_SAIDA.parent.mkdir(parents=True, exist_ok=True)   
+    return artigos_limpos
 if __name__ == "__main__":
     artigos = extrair_artigos()
+    with open(CAMINHO_SAIDA, "w", encoding="utf-8") as arquivo:
+        json.dump(artigos, arquivo, ensure_ascii=False, indent=2)
+    print(f"{len(artigos)} artigos extraídos e salvos em {CAMINHO_SAIDA}")
