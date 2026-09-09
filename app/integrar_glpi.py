@@ -12,7 +12,7 @@ if str(RAIZ_PROJETO) not in sys.path:
 if str(PASTA_AGENT) not in sys.path:
     sys.path.insert(0, str(PASTA_AGENT))
 
-from auth import fazer_login
+from scripts.auth import fazer_login
 from GLPI_Client import GLPIClient
 from app.busca_artigos import buscar_artigos
 

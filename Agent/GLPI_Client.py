@@ -1,4 +1,4 @@
-from auth import fazer_login
+from scripts.auth import fazer_login
 import requests
 
 client_id = '92e1a8497a5136e410301a573b8282bb'
