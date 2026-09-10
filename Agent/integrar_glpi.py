@@ -1,5 +1,8 @@
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+import os
+
 
 # Resolve a pasta Agent a partir deste arquivo, independentemente do diretório
 # em que o comando `python app/integrar_glpi.py` for executado.
@@ -17,8 +20,8 @@ from GLPI_Client import GLPIClient
 from app.busca_artigos import buscar_artigos
 
 
-CLIENT_ID = "92e1a8497a5136e410301a573b8282bb"
-CLIENT_SECRET = "156df3c0f488cd8be63a5ee3731568da3afa60239bed1018c8cec9f4c5355c17"
+CLIENT_ID = os.getenv("ID")
+CLIENT_SECRET = os.getenv("SECRET")
 
 
 def carregar_artigos():

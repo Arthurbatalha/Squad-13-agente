@@ -1,8 +1,9 @@
 from scripts.auth import fazer_login
 import requests
-
-client_id = '92e1a8497a5136e410301a573b8282bb'
-client_secret = '156df3c0f488cd8be63a5ee3731568da3afa60239bed1018c8cec9f4c5355c17'
+from dotenv import load_dotenv
+import os
+CLIENT_ID = os.getenv("ID")
+CLIENT_SECRET = os.getenv("SECRET")
 
 '''dados = (fazer_login(client_id, client_secret ))
 for k, v in dados.items():

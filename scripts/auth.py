@@ -1,5 +1,6 @@
 import requests
-
+from dotenv import load_dotenv
+import os
 BASE_URL = "http://localhost:8080/api.php"
 
 def fazer_login(client_id, client_secret, username="glpi", password="glpi"):
@@ -46,19 +47,21 @@ def renovar_token(client_id, client_secret, refresh_token): # CORRIGIDO: Nome do
 # Teste do script
 if __name__ == "__main__":
     # Colar credenciais
-    MEU_CLIENT_ID = "92e1a8497a5136e410301a573b8282bb"
-    MEU_CLIENT_SECRET = "156df3c0f488cd8be63a5ee3731568da3afa60239bed1018c8cec9f4c5355c17" # Ajustado o nome da constante
+    CLIENT_ID = os.getenv("ID")
+    CLIENT_SECRET = os.getenv("SECRET")  
+    
+    # Ajustado o nome da constante
 
     try:
         print("1. Testando Login Inicial")
-        dados_login = fazer_login(MEU_CLIENT_ID, MEU_CLIENT_SECRET)
+        dados_login = fazer_login(CLIENT_ID, CLIENT_SECRET)
         token_acesso = dados_login["access_token"]  # CORRIGIDO: Nome da chave correto
         token_atualizado = dados_login["refresh_token"]
 
         print(f"Login com sucesso! \nAccess Token obtido (primeiros 20 chars): {token_acesso[:20]}...\n")
         
         print("2. Testando Refresh de Token")
-        dados_refresh = renovar_token(MEU_CLIENT_ID, MEU_CLIENT_SECRET, token_atualizado)
+        dados_refresh = renovar_token(CLIENT_ID, CLIENT_SECRET, token_atualizado)
         novo_token_acesso = dados_refresh["access_token"]
 
         print(f"Refresh com sucesso! \nNovo Access Token obtido (primeiros 20 chars): {novo_token_acesso[:20]}...\n") # CORRIGIDO: Adicionado aspas duplas no final
