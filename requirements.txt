@@ -1,0 +1,6 @@
+Docker Desktop
+Docker Compose
+Python 3
+requests
+Git
+wls (Se for windowns)
