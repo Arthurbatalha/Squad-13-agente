@@ -1,7 +1,5 @@
 import sys
 from pathlib import Path
-from dotenv import load_dotenv
-import os
 
 
 # Resolve a pasta Agent a partir deste arquivo, independentemente do diretório
@@ -15,13 +13,13 @@ if str(RAIZ_PROJETO) not in sys.path:
 if str(PASTA_AGENT) not in sys.path:
     sys.path.insert(0, str(PASTA_AGENT))
 
-from scripts.auth import fazer_login
+from auth import fazer_login
 from GLPI_Client import GLPIClient
 from app.busca_artigos import buscar_artigos
 
 
-CLIENT_ID = os.getenv("ID")
-CLIENT_SECRET = os.getenv("SECRET")
+CLIENT_ID = '92e1a8497a5136e410301a573b8282bb'
+CLIENT_SECRET = '156df3c0f488cd8be63a5ee3731568da3afa60239bed1018c8cec9f4c5355c17'
 
 
 def carregar_artigos():

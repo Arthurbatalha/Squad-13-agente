@@ -1,9 +1,8 @@
-from scripts.auth import fazer_login
+from auth import fazer_login
 import requests
-from dotenv import load_dotenv
-import os
-CLIENT_ID = os.getenv("ID")
-CLIENT_SECRET = os.getenv("SECRET")
+
+CLIENT_ID = '92e1a8497a5136e410301a573b8282bb'
+CLIENT_SECRET = '156df3c0f488cd8be63a5ee3731568da3afa60239bed1018c8cec9f4c5355c17'
 
 '''dados = (fazer_login(client_id, client_secret ))
 for k, v in dados.items():
@@ -65,7 +64,7 @@ class GLPIClient:
 #Depuração e Edge Case
 if __name__ == "__main__":
 
-    client = GLPIClient(access_token=fazer_login(client_id, client_secret)["access_token"])
+    client = GLPIClient(access_token=fazer_login(CLIENT_ID, CLIENT_SECRET)["access_token"])
     artigos = client.all_call_search(
     "/Knowledgebase/Article",
     limit=25
