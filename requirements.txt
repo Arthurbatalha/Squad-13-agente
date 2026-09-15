@@ -1,8 +1,14 @@
+# Para rodar a DB
 Docker Desktop
 Docker Compose
+wls (Se for windowns) // Opcional
+
+# Requisitos para rodar o projeto
 Python 3
 requests
-Git
 dotenv
-wls (Se for windowns)
 os
+Pathlib
+
+# Para testes de RAG
+scikit-learn
