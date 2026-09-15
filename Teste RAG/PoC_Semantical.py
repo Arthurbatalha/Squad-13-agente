@@ -23,16 +23,4 @@ articles = client.all_call_search("/Knowledgebase/Article", limit=5)
 def remove_html(text):
     return re.sub(r"<[^>]+>", " ", text)
 
-clean_texts = [remove_html(article["content"]) for article in articles]
-
-# Inicializando e treinando o motor de busca lexical
-vectorizer = TfidfVectorizer()
-matriz_tfidf = vectorizer.fit_transform(clean_texts)
-question_vet = vectorizer.transform(["A rede da empresa fica desconectando sozinha"])
-response = cosine_similarity(question_vet, matriz_tfidf)[0]
-response_top3 = response.argsort()[-1:-4:-1]
-
-print(f"Matriz matemática gerada com sucesso! Formato: {matriz_tfidf.shape}")
-
-for i in range(len(response_top3)):
-    print(f"{i+1} -- {articles[response_top3[i]]["name"]} -- {response[response_top3[i]]:.3f}")
+# pode começar a partir daqui...
