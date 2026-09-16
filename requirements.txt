@@ -3,6 +3,4 @@ Docker Compose
 Python 3
 requests
 Git
-dotenv
 wls (Se for windowns)
-os
