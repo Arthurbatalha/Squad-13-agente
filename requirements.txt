@@ -9,6 +9,10 @@ requests
 dotenv
 os
 Pathlib
+sentence-transformers
+numpy
+pytest
+math
 
 # Para testes de RAG
 scikit-learn

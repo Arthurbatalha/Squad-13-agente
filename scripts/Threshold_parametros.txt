@@ -1,0 +1,4 @@
+0.35 → mais resultados, maior risco de ruído
+0.42 → ponto inicial
+0.50 → mais conservador
+0.60 → bastante restritivo
