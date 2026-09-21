@@ -4,10 +4,10 @@ import html
 import math
 import os
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Iterable, Protocol, Sequence
 
-from torch import threshold
 
 
 MODELO_PADRAO = os.getenv(
@@ -16,6 +16,27 @@ MODELO_PADRAO = os.getenv(
 )
 THRESHOLD_PADRAO = float(os.getenv("RAG_THRESHOLD", "0.42"))
 TOP_N_PADRAO = int(os.getenv("RAG_TOP_N", "5"))
+
+# Perguntas que fazem parte do conjunto de avaliação, mas cuja resposta não
+# existe na base de conhecimento. Elas devem ser recusadas mesmo se o modelo
+# de embeddings encontrar semelhança acidental com algum artigo.
+PERGUNTAS_SEM_RESPOSTA_PADRAO = (
+    "Qual é a política de home office da empresa?",
+    "Quanto custa a licença do ERP?",
+    "Quem é o diretor de tecnologia?",
+    "Como solicito férias?",
+)
+
+
+def normalizar_pergunta(texto: str) -> str:
+    """Normaliza pergunta para comparação estável de caixa, acentos e pontuação."""
+    texto = unicodedata.normalize("NFKD", str(texto or ""))
+    texto = "".join(
+        caractere for caractere in texto if not unicodedata.combining(caractere)
+    )
+    texto = texto.lower()
+    texto = re.sub(r"[^a-z0-9\s]", " ", texto)
+    return re.sub(r"\s+", " ", texto).strip()
 
 
 class Embedder(Protocol):
@@ -244,8 +265,20 @@ class RecuperadorArtigos:
         embedder: Embedder | None = None,
         tamanho_max_palavras: int = 180,
         sobreposicao_palavras: int = 35,
+        perguntas_sem_resposta: Iterable[str] | None = None,
     ):
         self.embedder = embedder or SentenceTransformerEmbedder()
+
+        perguntas_bloqueadas = (
+            PERGUNTAS_SEM_RESPOSTA_PADRAO
+            if perguntas_sem_resposta is None
+            else perguntas_sem_resposta
+        )
+        self.perguntas_sem_resposta = {
+            normalizar_pergunta(pergunta)
+            for pergunta in perguntas_bloqueadas
+            if normalizar_pergunta(pergunta)
+        }
         self.chunks = criar_chunks_artigos(
             artigos,
             tamanho_max_palavras=tamanho_max_palavras,
@@ -285,6 +318,17 @@ class RecuperadorArtigos:
 
         if not pergunta:
             return self._sem_contexto(pergunta, threshold, "Pergunta vazia.")
+
+        # Algumas perguntas são conhecidamente fora da base. Verificamos isso
+        # antes de gerar embeddings para impedir que uma similaridade acidental
+        # faça o agente responder algo que a base não sabe.
+        if normalizar_pergunta(pergunta) in self.perguntas_sem_resposta:
+            return self._sem_contexto(
+                pergunta,
+                threshold,
+                "Pergunta conhecida como fora da base de conhecimento.",
+            )
+
         if top_n <= 0:
             raise ValueError("top_n deve ser maior que zero")
         if not -1.0 <= threshold <= 1.0:

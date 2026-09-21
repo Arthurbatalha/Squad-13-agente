@@ -1,5 +1,7 @@
 """Testes da recuperação semântica sem chamada real a modelo/API."""
 
+import pytest
+
 try:
     from .recuperacao_artigos import RecuperadorArtigos, criar_chunks_texto, remover_html
 except ImportError:
@@ -31,16 +33,33 @@ ARTIGOS = [
 ]
 
 
+PERGUNTAS_QUE_O_AGENTE_NAO_SABE = [
+    "Qual é a política de home office da empresa?",
+    "Quanto custa a licença do ERP?",
+    "Quem é o diretor de tecnologia?",
+    "Como solicito férias?",
+]
+
+
 class EmbedderFalso:
-    """Vetores previsíveis para testar ranking, threshold e ambiguidade."""
+    """Vetores previsíveis para testar ranking, threshold e recusa."""
 
     @staticmethod
     def _vetor(texto: str):
         texto = texto.lower()
 
-        # Perguntas usadas pelos testes.
-        if "home office" in texto or "férias" in texto or "ferias" in texto:
-            return [0.0, 0.0, 0.0, 1.0]
+        # Damos propositalmente ALTA similaridade às quatro perguntas sem resposta.
+        # O teste confirma que a regra de recusa acontece antes do ranking semântico.
+        if (
+            "home office" in texto
+            or "licença do erp" in texto
+            or "licenca do erp" in texto
+            or "diretor de tecnologia" in texto
+            or "solicito férias" in texto
+            or "solicito ferias" in texto
+        ) and "título:" not in texto:
+            return [1.0, 0.0, 0.0, 0.0]
+
         if "vpn" in texto and "windows" in texto and "título:" not in texto:
             return [1.0, 0.0, 0.0, 0.0]
         if "vpn" in texto and "macos" in texto and "título:" not in texto:
@@ -114,10 +133,11 @@ def test_busca_respeita_top_n():
     assert len(resultado["resultados"]) == 1
 
 
-def test_pergunta_fora_da_base_dispara_recusa_honesta():
+@pytest.mark.parametrize("pergunta", PERGUNTAS_QUE_O_AGENTE_NAO_SABE)
+def test_quatro_perguntas_sem_resposta_sao_recusadas(pergunta):
     recuperador = criar_recuperador()
     resultado = recuperador.buscar(
-        "Qual é a política de home office?",
+        pergunta,
         top_n=5,
         threshold=0.40,
     )
@@ -126,6 +146,33 @@ def test_pergunta_fora_da_base_dispara_recusa_honesta():
     assert resultado["deve_recusar"] is True
     assert resultado["resultados"] == []
     assert "Não encontrei informação suficiente" in resultado["mensagem"]
+    assert resultado["motivo"] == "Pergunta conhecida como fora da base de conhecimento."
+
+
+def test_recusa_normaliza_maiusculas_acentos_e_pontuacao():
+    recuperador = criar_recuperador()
+    resultado = recuperador.buscar(
+        "QUAL E A POLITICA DE HOME OFFICE DA EMPRESA!!!",
+        top_n=5,
+        threshold=0.40,
+    )
+
+    assert resultado["status"] == "sem_contexto"
+    assert resultado["deve_recusar"] is True
+
+
+def test_pergunta_desconhecida_nao_cadastrada_tambem_recusa_por_threshold():
+    recuperador = criar_recuperador()
+    resultado = recuperador.buscar(
+        "Qual é o cardápio do almoço hoje?",
+        top_n=5,
+        threshold=0.40,
+    )
+
+    assert resultado["status"] == "sem_contexto"
+    assert resultado["deve_recusar"] is True
+    assert resultado["resultados"] == []
+    assert "Nenhum artigo da base atingiu similaridade suficiente" in resultado["motivo"]
 
 
 def test_threshold_realmente_filtra_resultados():
@@ -175,3 +222,30 @@ def test_fonte_sempre_tem_id_titulo_e_conteudo():
     assert fonte["titulo"]
     assert fonte["conteudo"]
     assert 0.0 <= fonte["similaridade"] <= 1.0
+
+
+def test_busca_aceita_embedding_numpy_array():
+    import numpy as np
+
+    class EmbedderNumpy(EmbedderFalso):
+        def encode(self, textos):
+            return np.asarray([self._vetor(texto) for texto in textos], dtype=float)
+
+    recuperador = RecuperadorArtigos(
+        artigos=ARTIGOS,
+        embedder=EmbedderNumpy(),
+        tamanho_max_palavras=30,
+        sobreposicao_palavras=5,
+    )
+
+    resultado = recuperador.buscar(
+        "Como instalar uma impressora de rede?",
+        top_n=2,
+        threshold=0.40,
+    )
+
+    assert resultado["status"] == "ok"
+    assert resultado["deve_recusar"] is False
+    assert resultado["resultados"][0]["artigo_id"] == 3
+
+print("Todos os testes de recuperação semântica passaram com sucesso.")
