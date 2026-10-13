@@ -3,8 +3,8 @@ try:
     from .artigos_teste import artigos
 except ImportError:
     # Permite executar o arquivo diretamente dentro da pasta app.
-    from busca_artigos import buscar_artigos
-    from artigos_teste import artigos
+    from src.rag.busca_artigos import buscar_artigos
+    from src.rag.artigos_teste import artigos
 
 
 def testar_vpn_windows():

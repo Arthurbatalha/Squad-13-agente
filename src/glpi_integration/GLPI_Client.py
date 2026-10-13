@@ -1,4 +1,4 @@
-from auth import fazer_login
+from src.glpi_integration.auth import fazer_login
 import requests
 
 CLIENT_ID = '92e1a8497a5136e410301a573b8282bb'
