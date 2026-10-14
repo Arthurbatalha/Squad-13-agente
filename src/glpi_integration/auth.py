@@ -1,6 +1,12 @@
 import requests
 import os
 from dotenv import load_dotenv
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 load_dotenv()
 
@@ -18,14 +24,18 @@ def fazer_login(client_id, client_secret, username="glpi", password="glpi"):
         "scope": "api"
     }
 
-    response = requests.post(url, json=payload)
+    try:
+        response = requests.post(url, json=payload, timeout=10)
 
-    # Tratamento de erro da credencial (Item 3 da task)
-    if response.status_code == 401:
-        raise ValueError("Erro de autenticação: Client ID ou Secret inválidos.")
+        # Tratamento de erro da credencial (Item 3 da task)
+        if response.status_code == 401:
+            raise ValueError("Erro de autenticação: Client ID ou Secret inválidos.")
 
-    response.raise_for_status() # lança erro para outro problemas
-    return response.json()
+        response.raise_for_status() # lança erro para outro problemas
+        return response.json()
+
+    except requests.exceptions.RequestException as e:
+        raise ConnectionError(f"Não é possível se comunicar com o servidor do GLPI no momento {e}")
 
 def renovar_token(client_id, client_secret, refresh_token): # CORRIGIDO: Nome do parâmetro arrumado
     """Gera um novo access_token usando o refresh_token."""
@@ -38,14 +48,17 @@ def renovar_token(client_id, client_secret, refresh_token): # CORRIGIDO: Nome do
         "scope": "api"
     }
 
-    response = requests.post(url, json=payload)
+    try:
+        response = requests.post(url, json=payload, timeout=10)
 
-    if response.status_code == 401:
-        raise ValueError("Erro ao renovar: Refresh token inválido ou expirado.")
+        if response.status_code == 401:
+            raise ValueError("Erro ao renovar: Refresh token inválido ou expirado.")
 
-    response.raise_for_status()
-    return response.json()
+        response.raise_for_status()
+        return response.json()
 
+    except requests.exceptions.RequestException as e:
+            raise ConnectionError(f"Não é possível se comunicar com o servidor do GLPI no momento: {e}")
 
 # Teste do script
 if __name__ == "__main__":
@@ -56,20 +69,20 @@ if __name__ == "__main__":
     # Ajustado o nome da constante
 
     try:
-        print("1. Testando Login Inicial")
+        logging.info("1. Testando Login Inicial")
         dados_login = fazer_login(CLIENT_ID, CLIENT_SECRET)
         token_acesso = dados_login["access_token"]  # CORRIGIDO: Nome da chave correto
         token_atualizado = dados_login["refresh_token"]
 
-        print(f"Login com sucesso! \nAccess Token obtido (primeiros 20 chars): {token_acesso[:20]}...\n")
+        logging.info(f"Login com sucesso! \nAccess Token obtido (primeiros 20 chars): {token_acesso[:20]}...\n")
         
-        print("2. Testando Refresh de Token")
+        logging.info("2. Testando Refresh de Token")
         dados_refresh = renovar_token(CLIENT_ID, CLIENT_SECRET, token_atualizado)
         novo_token_acesso = dados_refresh["access_token"]
 
-        print(f"Refresh com sucesso! \nNovo Access Token obtido (primeiros 20 chars): {novo_token_acesso[:20]}...\n") # CORRIGIDO: Adicionado aspas duplas no final
+        logging.info(f"Refresh com sucesso! \nNovo Access Token obtido (primeiros 20 chars): {novo_token_acesso[:20]}...\n") # CORRIGIDO: Adicionado aspas duplas no final
 
     except ValueError as e:
-        print(f"Falha na validação: {e}")
+        logging.error(f"Falha na validação: {e}")
     except Exception as e:
-        print(f"Erro inesperado: {e}")
+        logging.error(f"Erro inesperado: {e}")
