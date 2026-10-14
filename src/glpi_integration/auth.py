@@ -1,6 +1,10 @@
 import requests
+import os
+from dotenv import load_dotenv
 
-BASE_URL = "http://localhost:8080/api.php"
+load_dotenv()
+
+BASE_URL = os.getenv("GLPI_BASE_URL")
 
 def fazer_login(client_id, client_secret, username="glpi", password="glpi"):
     """Realiza o login inicial usando usuário e senha."""
@@ -46,8 +50,8 @@ def renovar_token(client_id, client_secret, refresh_token): # CORRIGIDO: Nome do
 # Teste do script
 if __name__ == "__main__":
     # Colar credenciais
-    CLIENT_ID = '92e1a8497a5136e410301a573b8282bb'
-    CLIENT_SECRET = '156df3c0f488cd8be63a5ee3731568da3afa60239bed1018c8cec9f4c5355c17' 
+    CLIENT_ID = os.getenv("GLPI_CLIENT_ID")
+    CLIENT_SECRET = os.getenv("GLPI_CLIENT_SECRET")
     
     # Ajustado o nome da constante
 

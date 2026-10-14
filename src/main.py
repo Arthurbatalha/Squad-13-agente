@@ -1,5 +1,9 @@
 import sys
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Resolve a raiz do projeto (Squad-13-agente) a partir de src/main.py
 RAIZ_PROJETO = Path(__file__).resolve().parent.parent
@@ -11,8 +15,8 @@ from src.glpi_integration.auth import fazer_login
 from src.glpi_integration.GLPI_Client import GLPIClient
 from src.rag.busca_artigos import buscar_artigos
 
-CLIENT_ID = '92e1a8497a5136e410301a573b8282bb'
-CLIENT_SECRET = '156df3c0f488cd8be63a5ee3731568da3afa60239bed1018c8cec9f4c5355c17'
+CLIENT_ID = os.getenv("GLPI_CLIENT_ID")
+CLIENT_SECRET = os.getenv("GLPI_CLIENT_SECRET")
 
 
 def carregar_artigos():
