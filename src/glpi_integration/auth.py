@@ -10,7 +10,7 @@ logging.basicConfig(
 
 load_dotenv()
 
-BASE_URL = os.getenv("GLPI_BASE_URL")
+BASE_URL = os.getenv("GLPI_BASE_URL_V1")
 
 def fazer_login(client_id, client_secret, username="glpi", password="glpi"):
     """Realiza o login inicial usando usuário e senha."""

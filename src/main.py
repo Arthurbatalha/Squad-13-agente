@@ -17,16 +17,18 @@ from src.rag.busca_artigos import buscar_artigos
 
 CLIENT_ID = os.getenv("GLPI_CLIENT_ID")
 CLIENT_SECRET = os.getenv("GLPI_CLIENT_SECRET")
+BASE_URL = os.getenv("GLPI_BASE_URL_V2")
 
 
 def carregar_artigos():
     dados_login = fazer_login(CLIENT_ID, CLIENT_SECRET)
 
     client = GLPIClient(
-        access_token=dados_login["access_token"]
+        BASE_URL,
+        access_token=dados_login["access_token"],
     )
 
-    artigos = client.all_call_search(
+    artigos = client.search_all(
         "/Knowledgebase/Article",
         limit=25,
     )
