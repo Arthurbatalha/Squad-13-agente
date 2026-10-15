@@ -23,7 +23,7 @@ class GLPIClient:
 
         return header
 
-    #Metodo para a coleta de chamados
+    #Metodo para a coleta de dados de um endpoit
     def search_all(self, endpoint, start=0, limit=25):
         all_calls = []
 
@@ -61,6 +61,7 @@ class GLPIClient:
 
         return all_calls
 
+    #Método para atualizar informações de um ticket
     def update_ticket(self, ticket_id, data):
 
         url = f"{self.base_url}/Assistance/Ticket/{ticket_id}"
@@ -82,7 +83,7 @@ class GLPIClient:
             logging.error(f"Falha ao atualizar o ticket {ticket_id}: {e}")
             raise ConnectionError(f"Não foi possível atualizar o ticket no GLPI: {e}")
         
-
+    #Método para adicionar uma solução ao ticket
     def add_solution(self, ticket_id, text):
 
         url = f"{self.base_url}/Assistance/Ticket/{ticket_id}/Timeline/Solution"
@@ -101,9 +102,10 @@ class GLPIClient:
             return {"ticket_id": ticket_id, "status": "solucao_adicionada"}
 
         except requests.exceptions.RequestException as e:
-            logging.error(f"Falha na comunicação com servidores do GLPI: {e}")
-            raise ConnectionError(f"Erro ao atualizar dados no GLPI: {e}")
+            logging.error(f"Falha ao adicionar a solução: {e}")
+            raise ConnectionError(f"Erro ao criar solução: {e}")
 
+    #Método para adicionar um FollowUp ao ticket
     def add_follow_up(self, ticket_id, text):
 
         url = f"{self.base_url}/Assistance/Ticket/{ticket_id}/Timeline/Followup"
@@ -123,8 +125,92 @@ class GLPIClient:
             return {"ticket_id": ticket_id, "status": "followup_adicionado"}
 
         except requests.exceptions.RequestException as e:
-            logging.error(f"Falha na comunicação com servidores do GLPI: {e}")
-            raise ConnectionError(f"Erro ao atualizar dados no GLPI: {e}")
+            logging.error(f"Falha em adicionar FollowUp ao ticket: {e}")
+            raise ConnectionError(f"Erro ao adicionar FollowUp: {e}")
+
+    #Método para coletar dados de id específico
+    def get_by_id(self, endpoint, item_id):
+
+        url = f"{self.base_url}{endpoint}/{item_id}"
+
+        try:
+
+            response = requests.get(
+                url,
+                headers=self.create_header('GET'),
+                timeout=10
+            )
+
+            response.raise_for_status()
+
+            if response.text.strip():
+                return response.json()
+            return {}
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Falha na pesquisa por item. Detalhes: {e}")
+            raise ConnectionError(f"Erro, falha ao encontrar id. {e}")
+
+    #Método para adicionar ticket
+    def add_ticket(self, title, content, category_id, priority=3):
+
+        url = f"{self.base_url}/Assistance/Ticket"
+
+        try:
+
+            response = requests.post(
+                url,
+                headers=self.create_header("POST"),
+                json={
+                    "name": title,
+                    "content": content,
+                    "priority": priority,
+                    "category": {"id": category_id}    
+                },
+                timeout=10,
+            )
+
+            response.raise_for_status()
+
+            if response.text.strip():
+                return response.json()
+            return {
+                "ticket_title": title,
+                "category": category_id,
+                "priority": priority
+                }
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Falha ao criar ticket. Detalhes: {e}")
+            raise ConnectionError(f"Erro na criação de ticket: {e}")
+
+    #Método para atribuir um membro a um chamado
+    def assign_member(self, ticket_id, user_id, role="assigned"):
+
+        url = f"{self.base_url}/Assistance/Ticket/{ticket_id}/TeamMember"
+
+        try:
+
+            response = requests.post(
+                url,
+                headers=self.create_header("POST"),
+                json={
+                    "type": "User",
+                    "id": user_id,
+                    "role": role
+                },
+                timeout=10
+            )
+            response.raise_for_status()
+
+            if response.text.strip():
+                return response.json()
+            return {}
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Falha ao atribuir membro ao ticket. Detalhes: {e}")
+            raise ConnectionError(f"Erro na atribuição de membro: {e}")
+
         
 #Depuração e Edge Case
 if __name__ == "__main__":
