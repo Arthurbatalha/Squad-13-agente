@@ -1,21 +1,10 @@
 import html
 import re
 from typing import Any, Iterable
+from sentence_transformers import SentenceTransformer
 
-PALAVRAS_IGNORADAS = {
-    "a", "o", "as", "os",
-    "um", "uma",
-    "de", "do", "da", "dos", "das",
-    "em", "no", "na", "nos", "nas",
-    "para", "por",
-    "e",
-    "como",
-    "que",
-    "qual",
-    "quais",
-    "me",
-    "se",
-}
+MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+model_embbendings = SentenceTransformer(MODEL)
 
 
 def remover_html(texto: Any) -> str:
@@ -33,73 +22,78 @@ def remover_html(texto: Any) -> str:
     linhas = [re.sub(r"\s+", " ", linha).strip() for linha in texto.splitlines()]
     return "\n".join(linha for linha in linhas if linha)
 
+def create_chunks(text, chunk_lenght=120, overlap=30):
 
-def limpar_texto(texto: Any) -> list[str]:
-    if texto is None:
+    words = text.split()
+    if not words:
         return []
 
-    palavras = re.findall(r"\b\w+\b", str(texto).lower(), flags=re.UNICODE)
+    step = chunk_lenght - overlap
+
+    if step <= 0:
+        step = 1
 
     return [
-        palavra
-        for palavra in palavras
-        if palavra not in PALAVRAS_IGNORADAS
+        " ".join(words [i : i + chunk_lenght])
+        for i in range(0, len(words), step)
     ]
 
 
-def buscar_artigos(pergunta: str, artigos: Iterable[dict[str, Any]], limite: int = 3):
-    """Retorna os artigos mais relevantes para uma pergunta.
+def buscar_artigos(question: str, articles: Iterable[dict[str, Any]], limit: int = 3):
 
-    Palavras encontradas no título valem 3 pontos e palavras encontradas
-    somente no conteúdo valem 1 ponto. Apenas resultados com 4 ou mais
-    pontos são retornados.
-    """
-    if limite <= 0:
+    if limit < 0 or not question:
         return []
 
-    palavras = limpar_texto(pergunta)
-    if not palavras:
-        return []
+    articles_list = list(articles or [])
 
-    resultados = []
+    chunks = []
+    chunk_article_indexes = []
 
-    for artigo in artigos or []:
-        if not isinstance(artigo, dict):
-            continue
+    for article_index, article in enumerate(articles_list):
+        title = article.get("name", "")
+        content = remover_html(article.get("content", ""))
 
-        artigo_id = artigo.get("id")
-        titulo = artigo.get("name", "")
-        conteudo = remover_html(artigo.get("content", ""))
+        full_text = f"{title}. {content}"
 
-        # Ignora registros incompletos em vez de derrubar toda a busca.
-        if artigo_id is None or not titulo:
-            continue
+        for chunk in create_chunks(full_text):
+            chunks.append(chunk)
+            chunk_article_indexes.append(article_index)
 
-        palavras_titulo = limpar_texto(titulo)
-        palavras_conteudo = limpar_texto(conteudo)
+    if not chunks:
+        return[]
 
-        pontuacao = 0
+    codyfying_texts = [question, *chunks]
 
-        for palavra in palavras:
-            if palavra in palavras_titulo:
-                pontuacao += 3
-            elif palavra in palavras_conteudo:
-                pontuacao += 1
-
-        if pontuacao >= 4:
-            resultados.append({
-                "id": artigo_id,
-                "titulo": titulo,
-                "conteudo": conteudo,
-                "pontuacao": pontuacao,
-            })
-
-    resultados.sort(
-        key=lambda resultado: resultado["pontuacao"],
-        reverse=True,
+    embbedings = model_embbendings.encode(
+        codyfying_texts,
+        normalize_embeddings=True,
+        show_progress_bar=True
     )
 
-    return resultados[:limite]
+    semantic_scores = embbedings[1:] @ embbedings[0]
+
+    top_articles = {}
+    for score, article_indx in zip(semantic_scores, chunk_article_indexes):
+        float_score = float(score)
+        if article_indx not in top_articles or float_score > top_articles[article_indx]:
+            top_articles[article_indx] = float_score
+
+    MIN_SIMILARITY = 0.45
+    res = []
+
+    for article_indx, max_score in top_articles.items():
+        if max_score >= MIN_SIMILARITY:
+            original_article = articles_list[article_indx]
+            res.append({
+                "id":original_article.get("id"),
+                "title": original_article.get("name", ""),
+                "content": remover_html(original_article.get("content", "")),
+                "score": max_score
+
+            })
+
+    res.sort(key=lambda x: x["score"], reverse=True)
+    return res[:limit]
 
 
 if __name__ == "__main__":
