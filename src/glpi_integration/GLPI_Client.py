@@ -1,4 +1,4 @@
-from src.glpi_integration.auth import fazer_login
+from src.glpi_integration.auth import fazer_login, renovar_token
 import requests
 from dotenv import load_dotenv
 import os
@@ -6,9 +6,12 @@ import logging
 
 class GLPIClient:
 
-    def __init__(self, base_url,access_token):
+    def __init__(self, base_url, access_token, refresh_token, client_id, client_secret):
         self.token = access_token
         self.base_url = base_url
+        self.refresh_token = refresh_token
+        self.client_id = client_id
+        self.client_secret = client_secret
 
     #Metodo para a criação de cabeçalhos
     def create_header(self, method):
@@ -23,6 +26,29 @@ class GLPIClient:
 
         return header
 
+    #Motor para requests com verificação de validade de token 
+    def _secure_request(self, method, url, **kwargs):
+
+        kwargs["headers"] = self.create_header(method)
+        kwargs["timeout"] = 10
+
+        response = requests.request(method, url, **kwargs)
+
+        if response.status_code == 401:
+            logging.info("Token Expirado. Auto refreshing em ação...")
+
+            new_data = renovar_token(self.client_id, self.client_secret, self.refresh_token)
+
+            self.token = new_data["access_token"]
+            self.refresh_token = new_data["refresh_token"]
+
+            kwargs["headers"] = self.create_header(method)
+
+            response = requests.request(method, url, **kwargs)
+
+        response.raise_for_status()
+        return response
+
     #Metodo para a coleta de dados de um endpoit
     def search_all(self, endpoint, start=0, limit=25):
         all_calls = []
@@ -30,20 +56,11 @@ class GLPIClient:
         while True:
 
             try:
-                response = requests.get(
-                    f'{self.base_url}{endpoint}',
-                    headers = self.create_header('GET'),
-                    params={
-                        "start": start,
-                        "limit": limit
-                    },
-                    timeout=10
-                    )
-
-
-                if not (200 <= response.status_code < 300):
-                    logging.error(f"Erro na busca ({response.status_code}): {response.text}")
-                    response.raise_for_status()
+                response = self._secure_request(
+                    "GET",
+                    f"{self.base_url}{endpoint}",
+                    params={"start": start, "limit": limit}
+                )
 
             except requests.exceptions.RequestException as e:
                 logging.error(f"Falha de comunicação no search_all: {e}")
@@ -67,13 +84,11 @@ class GLPIClient:
         url = f"{self.base_url}/Assistance/Ticket/{ticket_id}"
 
         try:
-            response = requests.patch(
+            response = self._secure_request(
+                "PATCH",
                 url,
-                json=data,
-                headers=self.create_header("PATCH"),
-                timeout=10
+                json=data
             )
-            response.raise_for_status()
         
             if response.text.strip():
                 return response.json()
@@ -89,13 +104,11 @@ class GLPIClient:
         url = f"{self.base_url}/Assistance/Ticket/{ticket_id}/Timeline/Solution"
         try:
 
-            response = requests.post(
+            response = self._secure_request(
+                "POST",
                 url,
-                headers=self.create_header("POST"),
-                json={"content": text},
-                timeout=10
+                json={"content": text}
             )
-            response.raise_for_status()
 
             if response.text.strip():
                 return response.json()
@@ -112,13 +125,11 @@ class GLPIClient:
 
         try:
 
-            response = requests.post(
+            response = self._secure_request(
+                "POST",
                 url,
-                headers=self.create_header("POST"),
-                json={"content": text},
-                timeout=10
+                json={"content": text}
             )
-            response.raise_for_status()
 
             if response.text.strip():
                 return response.json()
@@ -135,13 +146,7 @@ class GLPIClient:
 
         try:
 
-            response = requests.get(
-                url,
-                headers=self.create_header('GET'),
-                timeout=10
-            )
-
-            response.raise_for_status()
+            response = self._secure_request("GET", url)
 
             if response.text.strip():
                 return response.json()
@@ -158,19 +163,16 @@ class GLPIClient:
 
         try:
 
-            response = requests.post(
+            response = self._secure_request(
+                "POST",
                 url,
-                headers=self.create_header("POST"),
                 json={
                     "name": title,
                     "content": content,
                     "priority": priority,
                     "category": {"id": category_id}    
-                },
-                timeout=10,
+                }
             )
-
-            response.raise_for_status()
 
             if response.text.strip():
                 return response.json()
@@ -191,17 +193,15 @@ class GLPIClient:
 
         try:
 
-            response = requests.post(
+            response = self._secure_request(
+                "POST",
                 url,
-                headers=self.create_header("POST"),
                 json={
                     "type": "User",
                     "id": user_id,
                     "role": role
-                },
-                timeout=10
+                }
             )
-            response.raise_for_status()
 
             if response.text.strip():
                 return response.json()
@@ -222,16 +222,12 @@ if __name__ == "__main__":
     CLIENT_SECRET = os.getenv("GLPI_CLIENT_SECRET")
     BASE_URL = os.getenv("GLPI_BASE_URL_V2")
 
-    client = GLPIClient(BASE_URL, access_token=fazer_login(CLIENT_ID, CLIENT_SECRET)["access_token"])
-    artigos = client.search_all(
-        "/Knowledgebase/Article",
-        limit=25
+    dados_login = fazer_login(CLIENT_ID, CLIENT_SECRET)
+
+    client = GLPIClient(
+        base_url=BASE_URL, 
+        access_token=dados_login["access_token"],
+        refresh_token=dados_login.get("refresh_token"), # Usamos .get() por segurança
+        client_id=CLIENT_ID,
+        client_secret=CLIENT_SECRET
     )
-
-    print(f"total de artigos: {len(artigos)}")
-
-    for artigo in artigos:
-        print(
-            f"ID: {artigo['id']} | "
-            f"Título: {artigo['name']}"
-        )
