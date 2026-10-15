@@ -1,4 +1,4 @@
-from src.glpi_integration.auth import fazer_login, renovar_token
+from auth import fazer_login, renovar_token
 import requests
 from dotenv import load_dotenv
 import os
@@ -231,3 +231,16 @@ if __name__ == "__main__":
         client_id=CLIENT_ID,
         client_secret=CLIENT_SECRET
     )
+
+    artigos = client.search_all(
+        "/Knowledgebase/Article",
+        limit=25
+    )
+
+    print(f"total de artigos: {len(artigos)}")
+
+    for artigo in artigos:
+        print(
+            f"ID: {artigo['id']} | "
+            f"Título: {artigo['name']}"
+        )

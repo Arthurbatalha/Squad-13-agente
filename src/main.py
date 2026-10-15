@@ -24,8 +24,11 @@ def carregar_artigos():
     dados_login = fazer_login(CLIENT_ID, CLIENT_SECRET)
 
     client = GLPIClient(
-        BASE_URL,
+        base_url=BASE_URL, 
         access_token=dados_login["access_token"],
+        refresh_token=dados_login.get("refresh_token"), 
+        client_id=CLIENT_ID,
+        client_secret=CLIENT_SECRET
     )
 
     artigos = client.search_all(
