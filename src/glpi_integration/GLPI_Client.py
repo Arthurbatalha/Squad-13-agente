@@ -1,4 +1,4 @@
-from auth import fazer_login, renovar_token
+from src.glpi_integration.auth import fazer_login, renovar_token
 import requests
 from dotenv import load_dotenv
 import os
@@ -174,14 +174,16 @@ class GLPIClient:
                 }
             )
 
-            if response.text.strip():
-                return response.json()
-            return {
-                "ticket_title": title,
-                "category": category_id,
-                "priority": priority
-                }
+            if not response.text.strip():
+                raise requests.exceptions.RequestException("Resposta do GLPI vazia, ID do ticket não recebido")
 
+            ticket_id = response.json().get["id"]
+
+            if ticket_id <= 0 or ticket_id not int:
+                raise requests.exceptions.RequestException("GLPI não retornou id válido") 
+
+            return response.json()
+        
         except requests.exceptions.RequestException as e:
             logging.error(f"Falha ao criar ticket. Detalhes: {e}")
             raise ConnectionError(f"Erro na criação de ticket: {e}")
