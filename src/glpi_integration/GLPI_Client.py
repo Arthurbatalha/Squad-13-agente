@@ -177,9 +177,9 @@ class GLPIClient:
             if not response.text.strip():
                 raise requests.exceptions.RequestException("Resposta do GLPI vazia, ID do ticket não recebido")
 
-            ticket_id = response.json().get["id"]
+            ticket_id = response.json().get("id")
 
-            if ticket_id <= 0 or ticket_id not int:
+            if not isinstance(ticket_id, int) or ticket_id <= 0:
                 raise requests.exceptions.RequestException("GLPI não retornou id válido") 
 
             return response.json()
@@ -211,12 +211,35 @@ class GLPIClient:
 
         except requests.exceptions.RequestException as e:
             logging.error(f"Falha ao atribuir membro ao ticket. Detalhes: {e}")
-            raise ConnectionError(f"Erro na atribuição de membro: {e}")
+            raise ConnectionError(f"Erro na atribuição de membro: {e}") from e
 
-        
+    #Abre o ticket atribuindo o requester
+    def open_ticket(
+        self, title,
+        content, category_id, 
+        user_id, priority=3
+        ):
+
+        ticket = self.add_ticket(title, content, category_id, priority)
+        ticket_id = ticket["id"]
+
+        try:
+
+            self.assign_member(
+                ticket_id,
+                user_id,
+                role="requester"
+            )
+
+        except Exception as e:
+            logging.error(f"Falha ao adicionar requester no novo ticket [OBS: O ticket foi criado ID:{ticket_id}, mas o requester não foi confirmado]. Detalhes: {e}")
+            raise RuntimeError(f"Erro na atribuição de requester do ticket {ticket_id}: {e}") from e
+
+        else:
+            return ticket
+    
 #Depuração e Edge Case
 if __name__ == "__main__":
-
     
     load_dotenv()
 
