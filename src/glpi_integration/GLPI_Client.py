@@ -4,6 +4,11 @@ from dotenv import load_dotenv
 import os
 import logging
 
+class TicketRequesterAssignError(RuntimeError):
+    def __init__(self, ticket_id, message):
+        self.ticket_id = ticket_id
+        super().__init__(message)
+
 class GLPIClient:
 
     def __init__(self, base_url, access_token, refresh_token, client_id, client_secret):
@@ -233,7 +238,7 @@ class GLPIClient:
 
         except Exception as e:
             logging.error(f"Falha ao adicionar requester no novo ticket [OBS: O ticket foi criado ID:{ticket_id}, mas o requester não foi confirmado]. Detalhes: {e}")
-            raise RuntimeError(f"Erro na atribuição de requester do ticket {ticket_id}: {e}") from e
+            raise TicketRequesterAssignError(ticket_id ,f"Erro na atribuição de requester do ticket {ticket_id}: {e}") from e
 
         else:
             return ticket
