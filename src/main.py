@@ -1,35 +1,37 @@
 import sys
 from pathlib import Path
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 
-# Resolve a pasta Agent a partir deste arquivo, independentemente do diretório
-# em que o comando `python app/integrar_glpi.py` for executado.
+# Resolve a raiz do projeto (Squad-13-agente) a partir de src/main.py
 RAIZ_PROJETO = Path(__file__).resolve().parent.parent
-PASTA_AGENT = RAIZ_PROJETO / "Agent"
 
 if str(RAIZ_PROJETO) not in sys.path:
     sys.path.insert(0, str(RAIZ_PROJETO))
 
-if str(PASTA_AGENT) not in sys.path:
-    sys.path.insert(0, str(PASTA_AGENT))
+from src.glpi_integration.auth import fazer_login
+from src.glpi_integration.GLPI_Client import GLPIClient
+from src.rag.busca_artigos import buscar_artigos
 
-from auth import fazer_login
-from GLPI_Client import GLPIClient
-from app.busca_artigos import buscar_artigos
-
-
-CLIENT_ID = '92e1a8497a5136e410301a573b8282bb'
-CLIENT_SECRET = '156df3c0f488cd8be63a5ee3731568da3afa60239bed1018c8cec9f4c5355c17'
+CLIENT_ID = os.getenv("GLPI_CLIENT_ID")
+CLIENT_SECRET = os.getenv("GLPI_CLIENT_SECRET")
+BASE_URL = os.getenv("GLPI_BASE_URL_V2")
 
 
 def carregar_artigos():
     dados_login = fazer_login(CLIENT_ID, CLIENT_SECRET)
 
     client = GLPIClient(
-        access_token=dados_login["access_token"]
+        base_url=BASE_URL, 
+        access_token=dados_login["access_token"],
+        refresh_token=dados_login.get("refresh_token"), 
+        client_id=CLIENT_ID,
+        client_secret=CLIENT_SECRET
     )
 
-    artigos = client.all_call_search(
+    artigos = client.search_all(
         "/Knowledgebase/Article",
         limit=25,
     )

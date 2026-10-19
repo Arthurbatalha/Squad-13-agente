@@ -1,10 +1,18 @@
+import sys
+import pathlib as pth
+
+PROJECT_ROOT = pth.Path(__file__).resolve().parent.parent.parent
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 try:
     from .busca_artigos import buscar_artigos
     from .artigos_teste import artigos
 except ImportError:
     # Permite executar o arquivo diretamente dentro da pasta app.
-    from busca_artigos import buscar_artigos
-    from artigos_teste import artigos
+    from src.rag.busca_artigos import buscar_artigos
+    from src.rag.artigos_teste import artigos
 
 
 def testar_vpn_windows():
@@ -15,8 +23,8 @@ def testar_vpn_windows():
 
     assert resultados
     assert resultados[0]["id"] == 1
-    assert resultados[0]["titulo"] == "Configurar a VPN corporativa no Windows"
-    assert resultados[0]["conteudo"] != ""
+    assert resultados[0]["title"] == "Configurar a VPN corporativa no Windows"
+    assert resultados[0]["content"] != ""
 
 
 def testar_vpn_macos():
@@ -27,8 +35,8 @@ def testar_vpn_macos():
 
     assert resultados
     assert resultados[0]["id"] == 2
-    assert resultados[0]["titulo"] == "Configurar a VPN corporativa no macOS"
-    assert resultados[0]["conteudo"] != ""
+    assert resultados[0]["title"] == "Configurar a VPN corporativa no macOS"
+    assert resultados[0]["content"] != ""
 
 
 def testar_pergunta_sem_resposta():
@@ -40,4 +48,8 @@ def testar_pergunta_sem_resposta():
     assert resultados == []
 
 
-print("Todos os testes passaram com sucesso!")
+if __name__ == "__main__":
+    testar_vpn_windows()
+    testar_vpn_macos()
+    testar_pergunta_sem_resposta()
+    print("Todos os testes passaram com sucesso!")
