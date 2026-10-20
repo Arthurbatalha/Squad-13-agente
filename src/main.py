@@ -64,7 +64,7 @@ if __name__ == "__main__":
         for resultado in resultados:
             print(
                 f"ID: {resultado['id']} | "
-                f"Pontuação: {resultado['pontuacao']} | "
-                f"Título: {resultado['titulo']}"
+                f"Pontuação: {resultado['score']} | "
+                f"Título: {resultado['title']}"
             )
-            print(f"Conteúdo: {resultado['conteudo']}")
+            print(f"Conteúdo: {resultado['content']}")
