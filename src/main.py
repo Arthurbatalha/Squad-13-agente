@@ -1,9 +1,5 @@
 import sys
 from pathlib import Path
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # Resolve a raiz do projeto (Squad-13-agente) a partir de src/main.py
 RAIZ_PROJETO = Path(__file__).resolve().parent.parent
@@ -11,24 +7,26 @@ RAIZ_PROJETO = Path(__file__).resolve().parent.parent
 if str(RAIZ_PROJETO) not in sys.path:
     sys.path.insert(0, str(RAIZ_PROJETO))
 
+from src.config import load_settings
 from src.glpi_integration.auth import fazer_login
 from src.glpi_integration.GLPI_Client import GLPIClient
 from src.rag.busca_artigos import buscar_artigos
 
-CLIENT_ID = os.getenv("GLPI_CLIENT_ID")
-CLIENT_SECRET = os.getenv("GLPI_CLIENT_SECRET")
-BASE_URL = os.getenv("GLPI_BASE_URL_V2")
-
-
 def carregar_artigos():
-    dados_login = fazer_login(CLIENT_ID, CLIENT_SECRET)
+    settings = load_settings(require_glpi=True)
+    dados_login = fazer_login(
+        settings.glpi_client_id,
+        settings.glpi_client_secret,
+        username=settings.glpi_username,
+        password=settings.glpi_password,
+    )
 
     client = GLPIClient(
-        base_url=BASE_URL, 
+        base_url=settings.glpi_base_url_v2,
         access_token=dados_login["access_token"],
         refresh_token=dados_login.get("refresh_token"), 
-        client_id=CLIENT_ID,
-        client_secret=CLIENT_SECRET
+        client_id=settings.glpi_client_id,
+        client_secret=settings.glpi_client_secret
     )
 
     artigos = client.search_all(
@@ -64,7 +62,7 @@ if __name__ == "__main__":
         for resultado in resultados:
             print(
                 f"ID: {resultado['id']} | "
-                f"Pontuação: {resultado['pontuacao']} | "
-                f"Título: {resultado['titulo']}"
+                f"Pontuação: {resultado['score']} | "
+                f"Título: {resultado['title']}"
             )
-            print(f"Conteúdo: {resultado['conteudo']}")
+            print(f"Conteúdo: {resultado['content']}")
