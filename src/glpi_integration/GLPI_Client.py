@@ -1,12 +1,31 @@
-from src.glpi_integration.auth import fazer_login, renovar_token
+import sys
+from pathlib import Path
+
+RAIZ_PROJETO = Path(__file__).resolve().parents[2]
+if str(RAIZ_PROJETO) not in sys.path:
+    sys.path.insert(0, str(RAIZ_PROJETO))
+
+from src.glpi_integration.auth import (
+    REQUEST_TIMEOUT_SECONDS,
+    GLPIAuthenticationError,
+    GLPIProtocolError,
+    fazer_login,
+    renovar_token,
+)
 import requests
 from src.config import load_settings
 import logging
 
 class TicketRequesterAssignError(RuntimeError):
-    def __init__(self, ticket_id, message):
+    def __init__(self, ticket_id, message, *, outcome_uncertain=False):
         self.ticket_id = ticket_id
+        self.outcome_uncertain = outcome_uncertain
         super().__init__(message)
+
+
+class GLPIWriteOutcomeUnknownError(ConnectionError):
+    """A write may have reached GLPI; check remote state before retrying."""
+
 
 class GLPIClient:
 
@@ -30,25 +49,51 @@ class GLPIClient:
 
         return header
 
-    #Motor para requests com verificação de validade de token 
+    def _send_request(self, method, url, kwargs):
+        try:
+            return requests.request(method, url, **kwargs)
+        except requests.exceptions.RequestException as exc:
+            if method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+                raise GLPIWriteOutcomeUnknownError(
+                    "A conexão falhou durante uma escrita; o resultado no GLPI é incerto. "
+                    "Verifique o estado remoto antes de tentar novamente."
+                ) from exc
+            raise ConnectionError("Não foi possível comunicar com o servidor do GLPI.") from exc
+
     def _secure_request(self, method, url, **kwargs):
-
+        """Renew once after 401; never retry transport failures automatically."""
         kwargs["headers"] = self.create_header(method)
-        kwargs["timeout"] = 10
+        kwargs["timeout"] = REQUEST_TIMEOUT_SECONDS
+        response = self._send_request(method, url, kwargs)
 
-        response = requests.request(method, url, **kwargs)
+        if response.status_code != 401:
+            response.raise_for_status()
+            return response
+
+        logging.info("GLPI rejeitou o access token; tentando uma renovação.")
+        if not self.refresh_token:
+            raise GLPIAuthenticationError("Refresh token ausente; sessão não renovada.")
+
+        new_data = renovar_token(self.client_id, self.client_secret, self.refresh_token)
+        if not isinstance(new_data, dict):
+            raise GLPIProtocolError("Resposta de renovação do GLPI inválida.")
+
+        access_token = new_data.get("access_token")
+        refresh_token = new_data.get("refresh_token", self.refresh_token)
+        if not isinstance(access_token, str) or not access_token.strip():
+            raise GLPIProtocolError("Resposta de renovação sem access_token válido.")
+        if not isinstance(refresh_token, str) or not refresh_token.strip():
+            raise GLPIProtocolError("Resposta de renovação sem refresh_token válido.")
+
+        self.token = access_token
+        self.refresh_token = refresh_token
+        kwargs["headers"] = self.create_header(method)
+        response = self._send_request(method, url, kwargs)
 
         if response.status_code == 401:
-            logging.info("Token Expirado. Auto refreshing em ação...")
-
-            new_data = renovar_token(self.client_id, self.client_secret, self.refresh_token)
-
-            self.token = new_data["access_token"]
-            self.refresh_token = new_data["refresh_token"]
-
-            kwargs["headers"] = self.create_header(method)
-
-            response = requests.request(method, url, **kwargs)
+            raise GLPIAuthenticationError(
+                "GLPI rejeitou a requisição após a renovação; nenhuma nova tentativa foi feita."
+            )
 
         response.raise_for_status()
         return response
@@ -235,6 +280,16 @@ class GLPIClient:
                 role="requester"
             )
 
+        except GLPIWriteOutcomeUnknownError as e:
+            logging.error(
+                "A atribuição de requester do ticket %s tem resultado incerto.",
+                ticket_id,
+            )
+            raise TicketRequesterAssignError(
+                ticket_id,
+                "Resultado incerto ao atribuir requester; verifique o GLPI antes de repetir.",
+                outcome_uncertain=True,
+            ) from e
         except Exception as e:
             logging.error(f"Falha ao adicionar requester no novo ticket [OBS: O ticket foi criado ID:{ticket_id}, mas o requester não foi confirmado]. Detalhes: {e}")
             raise TicketRequesterAssignError(ticket_id ,f"Erro na atribuição de requester do ticket {ticket_id}: {e}") from e
