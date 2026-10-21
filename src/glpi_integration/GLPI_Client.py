@@ -1,7 +1,6 @@
 from src.glpi_integration.auth import fazer_login, renovar_token
 import requests
-from dotenv import load_dotenv
-import os
+from src.config import load_settings
 import logging
 
 class TicketRequesterAssignError(RuntimeError):
@@ -246,11 +245,10 @@ class GLPIClient:
 #Depuração e Edge Case
 if __name__ == "__main__":
     
-    load_dotenv()
-
-    CLIENT_ID = os.getenv("GLPI_CLIENT_ID")
-    CLIENT_SECRET = os.getenv("GLPI_CLIENT_SECRET")
-    BASE_URL = os.getenv("GLPI_BASE_URL_V2")
+    settings = load_settings(require_glpi=True)
+    CLIENT_ID = settings.glpi_client_id
+    CLIENT_SECRET = settings.glpi_client_secret
+    BASE_URL = settings.glpi_base_url_v2
 
     dados_login = fazer_login(CLIENT_ID, CLIENT_SECRET)
 

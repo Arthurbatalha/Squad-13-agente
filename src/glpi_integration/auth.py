@@ -1,6 +1,5 @@
 import requests
-import os
-from dotenv import load_dotenv
+from src.config import load_settings
 import logging
 
 logging.basicConfig(
@@ -8,13 +7,15 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-load_dotenv()
-
-BASE_URL = os.getenv("GLPI_BASE_URL_V1")
+def _token_url():
+    base_url = load_settings().glpi_base_url_v1
+    if not base_url:
+        raise ValueError("GLPI_BASE_URL_V1 não configurada no .env")
+    return f"{base_url}/token"
 
 def fazer_login(client_id, client_secret, username="glpi", password="glpi"):
     """Realiza o login inicial usando usuário e senha."""
-    url = f"{BASE_URL}/token"
+    url = _token_url()
     payload = {
         "grant_type": "password",
         "client_id": client_id,          # CORRIGIDO: Agora usa o parâmetro da função
@@ -39,7 +40,7 @@ def fazer_login(client_id, client_secret, username="glpi", password="glpi"):
 
 def renovar_token(client_id, client_secret, refresh_token): # CORRIGIDO: Nome do parâmetro arrumado
     """Gera um novo access_token usando o refresh_token."""
-    url = f"{BASE_URL}/token"
+    url = _token_url()
     payload = {
         "grant_type": "refresh_token",
         "client_id": client_id,
@@ -63,8 +64,9 @@ def renovar_token(client_id, client_secret, refresh_token): # CORRIGIDO: Nome do
 # Teste do script
 if __name__ == "__main__":
     # Colar credenciais
-    CLIENT_ID = os.getenv("GLPI_CLIENT_ID")
-    CLIENT_SECRET = os.getenv("GLPI_CLIENT_SECRET")
+    settings = load_settings(require_glpi=True)
+    CLIENT_ID = settings.glpi_client_id
+    CLIENT_SECRET = settings.glpi_client_secret
     
     # Ajustado o nome da constante
 

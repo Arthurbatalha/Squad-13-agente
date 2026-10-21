@@ -31,8 +31,13 @@ def test_main_displays_search_results(monkeypatch, capsys, has_results):
         }
     ] if has_results else []
 
-    # Evita carregar configurações reais.
-    mock_module(monkeypatch, "dotenv", load_dotenv=lambda: None)
+    # Fornece configurações fictícias para o teste, sem chamar serviços reais.
+    monkeypatch.setenv("GLPI_CLIENT_ID", "test-client")
+    monkeypatch.setenv("GLPI_CLIENT_SECRET", "test-secret")
+    monkeypatch.setenv("GLPI_BASE_URL_V1", "http://localhost:8080/api.php")
+    monkeypatch.setenv("GLPI_BASE_URL_V2", "http://localhost:8080/api.php/v2")
+    monkeypatch.setenv("APP_TIMEZONE", "America/Fortaleza")
+    mock_module(monkeypatch, "dotenv", load_dotenv=lambda *args, **kwargs: None)
 
     # Evita autenticação e consultas ao GLPI.
     mock_module(

@@ -1,14 +1,22 @@
-# Para rodar a DB
-Docker Desktop
-Docker Compose
-wls (Se for windowns) // Opcional
+# GLPI-01 — versões fixadas para validação de instalação limpa.
+# Python recomendado para a validação: CPython 3.13 (64 bits).
+# Estes pins são candidatos; só considerar a combinação validada após
+# `pip install -r requirements.txt`, `pip check` e os testes no ambiente limpo.
 
-# Requisitos para rodar o projeto
-Python 3
-requests
-dotenv
-os
-Pathlib
+# Protótipo atual: requisições, configuração, busca e fuso horário.
+requests==2.34.2
+python-dotenv==1.2.4
+sentence-transformers==6.1.0
+tzdata==2026.4
 
-# Para testes de RAG
-scikit-learn
+# Stack aprovada para as próximas entregas do MVP (ainda não integrada).
+html2text==2025.4.15
+chromadb==1.5.9
+langchain==1.4.6
+langgraph==1.2.12
+langchain-google-genai==4.4.2
+langgraph-checkpoint-sqlite==3.1.2
+
+# Testes automatizados e prova de conceito lexical.
+pytest==9.1.1
+scikit-learn==1.9.1
