@@ -1,187 +1,121 @@
+import sys
 from collections import Counter
+from pathlib import Path
 
-import requests
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-
-BASE_URL = "http://localhost:8080"
-
-CLIENT_ID = '92e1a8497a5136e410301a573b8282bb'
-CLIENT_SECRET = '156df3c0f488cd8be63a5ee3731568da3afa60239bed1018c8cec9f4c5355c17'
-
-GLPI_USERNAME = "glpi"
-GLPI_PASSWORD = "glpi"
+from src.config import load_settings
+from src.glpi_integration.auth import fazer_login
+from src.glpi_integration.GLPI_Client import GLPIClient, GLPIProtocolError
 
 
-# =========================================================
-# AUTENTICAÇÃO OAUTH 2.0
-# =========================================================
-
-def obter_token():
-    """Obtém um access_token OAuth2 do GLPI 11."""
-    url = f"{BASE_URL}/api.php/token"
-
-    payload = {
-        "grant_type": "password",
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "username": GLPI_USERNAME,
-        "password": GLPI_PASSWORD,
-        "scope": "api",
-    }
-
-    resp = requests.post(url, json=payload, timeout=30)
-
-    print(f"Status da autenticação: {resp.status_code}")
-
-    if not resp.ok:
-        print("Resposta do GLPI:")
-        print(resp.text)
-
-    resp.raise_for_status()
-
-    dados = resp.json()
-
-    if "access_token" not in dados:
-        raise RuntimeError(
-            "O GLPI respondeu à autenticação, mas não retornou access_token. "
-            f"Resposta: {dados}"
-        )
-
-    return dados["access_token"]
-
-
-# =========================================================
-# CONSULTAS À API V2
-# =========================================================
-
-def buscar_todos(endpoint, token):
-    """Busca todos os registros de um endpoint paginado da API v2."""
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-    }
-
-    itens = []
-    start = 0
-    limit = 50
-
-    while True:
-        url = f"{BASE_URL}{endpoint}"
-        params = {
-            "start": start,
-            "limit": limit,
-        }
-
-        resp = requests.get(
-            url,
-            headers=headers,
-            params=params,
-            timeout=30,
-        )
-
-        # A API pode responder 200 (coleção completa) ou 206 (página parcial).
-        # Tratar qualquer 2xx como sucesso deixa o código compatível com ambos.
-        if not 200 <= resp.status_code < 300:
-            print(f"Erro ao consultar {endpoint}: HTTP {resp.status_code}")
-            print(resp.text)
-            resp.raise_for_status()
-
-        dados = resp.json()
-
-        if isinstance(dados, list):
-            lista = dados
-        elif isinstance(dados, dict):
-            lista = dados.get("data", [])
-        else:
-            lista = []
-
-        if not lista:
-            break
-
-        itens.extend(lista)
-
-        # HTTP 200 normalmente indica que o que foi pedido já cobriu toda a
-        # coleção. Também paramos quando vier menos registros que o limite.
-        if resp.status_code == 200 or len(lista) < limit:
-            break
-
-        start += limit
-
-    return itens
-
-
-def nome_dropdown(valor, padrao="Não informado"):
-    """Extrai um nome legível de dropdowns expandidos da API v2."""
-    if isinstance(valor, dict):
-        return valor.get("name") or str(valor.get("id", padrao))
-
-    if valor is None or valor == "":
-        return padrao
-
-    return str(valor)
-
-
-# =========================================================
-# EXECUÇÃO
-# =========================================================
-
-def main():
-    print("Autenticando via OAuth 2.0...")
-
-    try:
-        token = obter_token()
-        print("Token obtido com sucesso!\n")
-    except requests.RequestException as e:
-        print(f"Erro HTTP ao obter token: {e}")
-        return
-    except Exception as e:
-        print(f"Erro ao obter token: {e}")
-        return
-
-    print("Buscando chamados (Tickets)...")
-
-    try:
-        chamados = buscar_todos(
-            "/api.php/v2/Assistance/Ticket",
-            token,
-        )
-    except requests.RequestException as e:
-        print(f"Erro ao buscar chamados: {e}")
-        return
-
-    print(f"Total de chamados encontrados: {len(chamados)}")
-
-    # Na API v2, status e category vêm como objetos {id, name}.
-    status_contagem = Counter(
-        nome_dropdown(ticket.get("status"))
-        for ticket in chamados
+def create_client():
+    """Autentica e cria o cliente comum da API v2."""
+    settings = load_settings(require_glpi=True)
+    tokens = fazer_login(
+        settings.glpi_client_id,
+        settings.glpi_client_secret,
+        username=settings.glpi_username,
+        password=settings.glpi_password,
+    )
+    return GLPIClient(
+        base_url=settings.glpi_base_url_v2,
+        access_token=tokens["access_token"],
+        refresh_token=tokens.get("refresh_token"),
+        client_id=settings.glpi_client_id,
+        client_secret=settings.glpi_client_secret,
     )
 
-    categoria_contagem = Counter(
-        nome_dropdown(ticket.get("category"))
-        for ticket in chamados
+
+def extract_participants(tickets):
+    """Preserva a equipe embutida e seu vínculo com cada chamado."""
+    participants = []
+    for ticket in tickets:
+        team = ticket.get("team")
+        if not isinstance(team, list):
+            raise GLPIProtocolError(
+                f"Chamado {ticket.get('id', '<sem id>')} sem team em formato de lista."
+            )
+        for member in team:
+            if not isinstance(member, dict):
+                raise GLPIProtocolError(
+                    f"Chamado {ticket.get('id', '<sem id>')} contém membro inválido."
+                )
+            participants.append({
+                "ticket_id": ticket.get("id"),
+                "participant": member,
+            })
+    return participants
+
+
+def collect_data(client):
+    """Lê recursos completos pelo cliente compartilhado, sem executar escritas."""
+    tickets = client.search_all("/Assistance/Ticket")
+    categories = client.search_all("/Dropdowns/ITILCategory")
+    users = client.search_all("/Administration/User")
+    articles = client.search_all("/Knowledgebase/Article")
+    participants = extract_participants(tickets)
+
+    return {
+        "tickets": tickets,
+        "categories": categories,
+        "users": users,
+        "articles": articles,
+        "participants": participants,
+        "participants_complete": tickets.complete,
+        "participants_source": f"{tickets.endpoint} (campo team)",
+    }
+
+
+def _print_summary(name, collection):
+    if not collection.complete:
+        raise GLPIProtocolError(f"A coleção {collection.endpoint} está incompleta.")
+    print(
+        f"{name}: {collection.total} registros "
+        f"({collection.pages} páginas; completa; origem {collection.endpoint})"
+    )
+
+
+def main():
+    data = collect_data(create_client())
+    _print_summary("Chamados", data["tickets"])
+    _print_summary("Categorias", data["categories"])
+    _print_summary("Usuários", data["users"])
+    _print_summary("Artigos", data["articles"])
+    print(
+        f"Participantes: {len(data['participants'])} vínculos "
+        f"({'completa' if data['participants_complete'] else 'incompleta'}; "
+        f"origem {data['participants_source']})"
+    )
+
+    tickets = data["tickets"]
+    status_counts = Counter(
+        dropdown_name(ticket.get("status"))
+        for ticket in tickets
+    )
+    category_counts = Counter(
+        dropdown_name(ticket.get("category"))
+        for ticket in tickets
     )
 
     print("\n--- DISTRIBUIÇÃO POR STATUS ---")
-    for status, qtd in sorted(status_contagem.items()):
-        print(f"{status}: {qtd}")
+    for status, count in sorted(status_counts.items()):
+        print(f"{status}: {count}")
 
     print("\n--- DISTRIBUIÇÃO POR CATEGORIA ---")
-    for categoria, qtd in sorted(categoria_contagem.items()):
-        print(f"{categoria}: {qtd}")
+    for category, count in sorted(category_counts.items()):
+        print(f"{category}: {count}")
 
-    print("\nBuscando artigos da Base de Conhecimento...")
 
-    try:
-        artigos = buscar_todos(
-            "/api.php/v2/Knowledgebase/Article",
-            token,
-        )
-    except requests.RequestException as e:
-        print(f"Erro ao buscar artigos: {e}")
-        return
-
-    print(f"Total de artigos encontrados: {len(artigos)}")
+def dropdown_name(value, default="Não informado"):
+    """Extrai um nome legível de dropdowns expandidos da API v2."""
+    if isinstance(value, dict):
+        return value.get("name") or str(value.get("id", default))
+    if value is None or value == "":
+        return default
+    return str(value)
 
 
 if __name__ == "__main__":

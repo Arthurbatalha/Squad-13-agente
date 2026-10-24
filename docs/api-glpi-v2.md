@@ -142,6 +142,76 @@ responsável. Um chamado pode ter os dois papéis ocupados pela mesma
 pessoa — confira o `id`/`name` de cada entrada antes de assumir que são
 pessoas diferentes.
 
+## Contrato de leitura do cliente compartilhado
+
+As leituras do coletor usam `GLPIClient.search_all()` para chamados,
+categorias (`/Dropdowns/ITILCategory`), usuários (`/Administration/User`)
+e artigos (`/Knowledgebase/Article`). Participantes são extraídos do campo
+`team` já embutido nos chamados e mantêm o `ticket_id` e o objeto original
+do membro, incluindo `role`, `id`, `name` e os demais campos recebidos.
+Nenhum campo do chamado é projetado ou normalizado: `is_deleted`, `date`,
+`date_solve`, `date_close`, valores `team` e seus offsets são preservados.
+Não há filtro local que descarte chamados da lixeira.
+
+O cliente aceita somente HTTP 200 ou 206 para listagens e exige que a
+resposta JSON seja uma lista de objetos. Em respostas 206, valida
+`Content-Range`, o offset e a quantidade de registros antes de buscar a
+próxima página. Página 206 vazia, intervalo inconsistente, IDs repetidos,
+JSON inesperado ou falha de transporte interrompem a operação com erro;
+uma coleção parcial nunca é retornada como resultado completo. HTTP 200
+com lista vazia é uma coleção vazia válida.
+
+O retorno de `search_all()` continua compatível com `list` e expõe
+`complete`, `total`, `pages` e `endpoint`. `complete` só é verdadeiro para
+uma coleta que terminou sem lacunas; `total` é o total indicado pela API
+quando há `Content-Range`. `get_by_id()` usa o mesmo transporte/autenticação
+e exige HTTP 200 com um objeto JSON não vazio.
+
+### Amostra de contrato e origem
+
+A forma abaixo representa o contrato observado na instância GLPI 11.0.8 do
+lab local. Em leitura somente GET realizada em 2026-10-24 contra
+`http://localhost:8080/api.php/v2`, o cliente recebeu 300 chamados em 12
+páginas, 6 categorias e 21 usuários; todas as três coleções foram completas.
+As rotas de detalhe de chamado, categoria e usuário também retornaram objeto
+JSON via `get_by_id()`. Nos 300 chamados, `team` era lista e foram observados
+os papéis `requester` e `assigned` (568 vínculos no total). O detalhe de
+chamado continha `is_deleted`, `date`, `date_solve` e `date_close`; os três
+valores de data presentes no detalhe consultado tinham offset explícito.
+Nenhum valor de identidade ou conteúdo do chamado foi gravado neste registro.
+
+A amostra estrutural abaixo omite valores reais de identidade. Seus valores
+de data/ID são ilustrativos; o que foi verificado ao vivo são os campos e
+formatos descritos acima:
+
+```json
+{
+  "id": 123,
+  "date": "2025-01-15 09:30:00",
+  "date_solve": null,
+  "date_close": null,
+  "is_deleted": false,
+  "team": [
+    {
+      "role": "requester",
+      "id": 7,
+      "type": "User",
+      "name": "<identidade omitida>"
+    },
+    {
+      "role": "assigned",
+      "id": 8,
+      "type": "User",
+      "name": "<identidade omitida>"
+    }
+  ]
+}
+```
+
+Os campos `date`, `date_solve`, `date_close` e `is_deleted` são mantidos sem
+transformação. As datas devem ser preservadas como retornadas pelo GLPI, sem
+remover offset ou assumir conversão de fuso.
+
 ## Timeline (comentários e solução)
 
 `GET /api.php/v2/Assistance/Ticket/{id}/Timeline` — confirmado ao vivo,
