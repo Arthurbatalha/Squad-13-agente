@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import re
 
 RAIZ_PROJETO = Path(__file__).resolve().parents[2]
 if str(RAIZ_PROJETO) not in sys.path:
@@ -25,6 +26,17 @@ class TicketRequesterAssignError(RuntimeError):
 
 class GLPIWriteOutcomeUnknownError(ConnectionError):
     """A write may have reached GLPI; check remote state before retrying."""
+
+
+class GLPICollection(list):
+    """A complete paginated collection, retaining list compatibility."""
+
+    def __init__(self, endpoint, items, total, pages):
+        super().__init__(items)
+        self.endpoint = endpoint
+        self.total = total
+        self.pages = pages
+        self.complete = True
 
 
 class GLPIClient:
@@ -98,34 +110,130 @@ class GLPIClient:
         response.raise_for_status()
         return response
 
-    #Metodo para a coleta de dados de um endpoit
+    @staticmethod
+    def _decode_collection(response, endpoint):
+        try:
+            items = response.json()
+        except ValueError as exc:
+            raise GLPIProtocolError(
+                f"Resposta JSON inválida ao listar {endpoint}."
+            ) from exc
+
+        if not isinstance(items, list):
+            raise GLPIProtocolError(
+                f"Resposta inválida ao listar {endpoint}: era esperada uma lista."
+            )
+        if any(not isinstance(item, dict) for item in items):
+            raise GLPIProtocolError(
+                f"Resposta inválida ao listar {endpoint}: item não é um objeto."
+            )
+        return items
+
+    @staticmethod
+    def _content_range(response, endpoint, requested_start, item_count):
+        content_range = response.headers.get("Content-Range")
+        match = re.fullmatch(r"(\d+)-(\d+)/(\d+)", content_range or "")
+        if not match:
+            raise GLPIProtocolError(
+                f"Resposta parcial de {endpoint} sem Content-Range válido."
+            )
+
+        range_start, range_end, total = map(int, match.groups())
+        if (
+            range_start != requested_start
+            or range_end < range_start
+            or range_end >= total
+            or range_end - range_start + 1 != item_count
+        ):
+            raise GLPIProtocolError(
+                f"Content-Range inconsistente ao listar {endpoint}."
+            )
+        return range_end, total
+
+    # Método para a coleta de todos os dados de um endpoint
     def search_all(self, endpoint, start=0, limit=25):
-        all_calls = []
+        if isinstance(start, bool) or not isinstance(start, int) or start < 0:
+            raise ValueError("start deve ser um inteiro não negativo.")
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+            raise ValueError("limit deve ser um inteiro positivo.")
+
+        items = []
+        seen_ids = set()
+        pages = 0
+        expected_total = None
+        initial_start = start
 
         while True:
-
-            try:
-                response = self._secure_request(
-                    "GET",
-                    f"{self.base_url}{endpoint}",
-                    params={"start": start, "limit": limit}
+            response = self._secure_request(
+                "GET",
+                f"{self.base_url}{endpoint}",
+                params={"start": start, "limit": limit},
+            )
+            pages += 1
+            if response.status_code not in (200, 206):
+                raise GLPIProtocolError(
+                    f"Status HTTP inesperado ao listar {endpoint}: "
+                    f"{response.status_code}."
                 )
 
-            except requests.exceptions.RequestException as e:
-                logging.error(f"Falha de comunicação no search_all: {e}")
-                raise ConnectionError(f"Erro ao buscar dados no GLPI: {e}")
-            
-            calls_frag = response.json()
+            page = self._decode_collection(response, endpoint)
+            if response.status_code == 200:
+                content_range = response.headers.get("Content-Range")
+                if content_range:
+                    range_end, total = self._content_range(
+                        response, endpoint, start, len(page)
+                    )
+                    if range_end + 1 != total:
+                        raise GLPIProtocolError(
+                            f"Resposta HTTP 200 incompleta ao listar {endpoint}."
+                        )
+                    if expected_total is not None and expected_total != total:
+                        raise GLPIProtocolError(
+                            f"Total de registros mudou durante a leitura de {endpoint}."
+                        )
+                    expected_total = total
+            else:
+                if not page:
+                    raise GLPIProtocolError(
+                        f"Página HTTP 206 vazia ao listar {endpoint}; "
+                        "não é possível confirmar a completude."
+                    )
+                if len(page) > limit:
+                    raise GLPIProtocolError(
+                        f"Página maior que o limite solicitado ao listar {endpoint}."
+                    )
+                range_end, total = self._content_range(
+                    response, endpoint, start, len(page)
+                )
+                if expected_total is not None and expected_total != total:
+                    raise GLPIProtocolError(
+                        f"Total de registros mudou durante a leitura de {endpoint}."
+                    )
+                expected_total = total
 
-            all_calls.extend(calls_frag)
+            for item in page:
+                item_id = item.get("id")
+                if isinstance(item_id, (str, int)) and not isinstance(item_id, bool):
+                    normalized_id = str(item_id)
+                    if normalized_id in seen_ids:
+                        raise GLPIProtocolError(
+                            f"Registro duplicado na paginação de {endpoint}."
+                        )
+                    seen_ids.add(normalized_id)
 
-            if len(calls_frag) == limit:
-                start += limit
+            items.extend(page)
 
-            if len(calls_frag) < limit or response.status_code == 200:
-                break
+            if response.status_code == 200:
+                total = expected_total if expected_total is not None else len(items)
+                if total != initial_start + len(items):
+                    raise GLPIProtocolError(
+                        f"Quantidade recebida não corresponde ao total de {endpoint}."
+                    )
+                return GLPICollection(endpoint, items, total, pages)
 
-        return all_calls
+            if range_end + 1 == expected_total:
+                return GLPICollection(endpoint, items, expected_total, pages)
+            start = range_end + 1
 
     #Método para atualizar informações de um ticket
     def update_ticket(self, ticket_id, data):
@@ -188,22 +296,30 @@ class GLPIClient:
             logging.error(f"Falha em adicionar FollowUp ao ticket: {e}")
             raise ConnectionError(f"Erro ao adicionar FollowUp: {e}")
 
-    #Método para coletar dados de id específico
+    # Método para coletar dados de id específico
     def get_by_id(self, endpoint, item_id):
 
         url = f"{self.base_url}{endpoint}/{item_id}"
 
+        response = self._secure_request("GET", url)
+        if response.status_code != 200:
+            raise GLPIProtocolError(
+                f"Status HTTP inesperado ao consultar {endpoint}/{item_id}: "
+                f"{response.status_code}."
+            )
+
         try:
-
-            response = self._secure_request("GET", url)
-
-            if response.text.strip():
-                return response.json()
-            return {}
-
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Falha na pesquisa por item. Detalhes: {e}")
-            raise ConnectionError(f"Erro, falha ao encontrar id. {e}")
+            item = response.json()
+        except ValueError as exc:
+            raise GLPIProtocolError(
+                f"Resposta JSON inválida ao consultar {endpoint}/{item_id}."
+            ) from exc
+        if not isinstance(item, dict) or not item:
+            raise GLPIProtocolError(
+                f"Resposta inválida ao consultar {endpoint}/{item_id}: "
+                "era esperado um objeto."
+            )
+        return item
 
     #Método para adicionar ticket
     def add_ticket(self, title, content, category_id, priority=3):
