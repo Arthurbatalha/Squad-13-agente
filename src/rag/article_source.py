@@ -13,9 +13,9 @@ from src.glpi_integration.GLPI_Client import (
 )
 import logging
 
-def source_treatment(instancia: GLPIClient, endpoint: str)-> list:
+def source_treatment(instancia: GLPIClient)-> list:
     try:
-        raw_data = instancia.search_all(endpoint)
+        raw_data = instancia.search_all("/Knowledgebase/Article")
 
         if not isinstance(raw_data, GLPICollection):
             raise GLPIProtocolError("Ocorreur um erro no retorno dos dados!!")
@@ -33,7 +33,7 @@ def source_treatment(instancia: GLPIClient, endpoint: str)-> list:
                 "title": data.get("name"),
                 "content": data.get("content"),
                 "date_mod": data.get("date_mod"),
-                "source_reference": "Knowledgebase/Article"
+                "source_reference": "/Knowledgebase/Article"
             }
 
             clean_data.append(dict_data)
@@ -62,5 +62,5 @@ if __name__ == "__main__":
         settings.glpi_client_id,
         settings.glpi_client_secret
     )
-    for i,e in enumerate(source_treatment(client ,"/Knowledgebase/Article")):
+    for i,e in enumerate(source_treatment(client)):
         print(f"{i}: {e['title']}")
