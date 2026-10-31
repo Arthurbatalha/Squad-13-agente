@@ -14,6 +14,25 @@ from src.glpi_integration.GLPI_Client import (
 import logging
 
 def source_treatment(instancia: GLPIClient)-> list:
+    """
+    Coleta e sanitiza os artigos da Base de Conhecimento do GLPI.
+    
+    Regra de Negócio (Decisão 1 e 4): 
+    Todos os artigos retornados são considerados base técnica compartilhada para a demonstração.
+    O sistema NÃO deve utilizar o campo 'is_faq' isoladamente como bloqueio de autorização.
+    
+    Amostra do Contrato de Saída (Sanitizado):
+    [
+        {
+            "id": 123,
+            "title": "Como configurar a VPN",
+            "content": "<p>Passo a passo da VPN...</p>",
+            "date_mod": "2026-10-20 14:30:00",
+            "source_reference": "/Knowledgebase/Article"
+        }
+    ]
+    """
+    
     try:
         raw_data = instancia.search_all("/Knowledgebase/Article")
 
