@@ -8,7 +8,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.config import load_settings
 from src.glpi_integration.auth import fazer_login
-from src.glpi_integration.GLPI_Client import GLPIClient, GLPIProtocolError
+from src.glpi_integration.GLPI_Client import (
+    GLPIClient,
+    GLPICollection,
+    GLPIProtocolError,
+)
 
 
 def create_client():
@@ -77,6 +81,48 @@ def _print_summary(name, collection):
         f"({collection.pages} páginas; completa; origem {collection.endpoint})"
     )
 
+def build_diagnostic(data):
+    """Valida as coleções e organiza as contagens sem consultar a API."""
+    totals = {}
+
+    for name in ("tickets", "categories", "users", "articles"):
+        collection = data.get(name)
+
+        if not isinstance(collection, GLPICollection):
+            raise GLPIProtocolError(
+                f"A coleção {name} não possui o contrato esperado."
+            )
+
+        if collection.complete is not True:
+            raise GLPIProtocolError(
+                f"A coleção {name} está incompleta."
+            )
+
+        if collection.total != len(collection):
+            raise GLPIProtocolError(
+                f"O total informado para {name} não corresponde "
+                "à quantidade de registros recebidos."
+            )
+
+        totals[name] = len(collection)
+
+    tickets = data["tickets"]
+
+    status_counts = Counter(
+        dropdown_name(ticket.get("status"))
+        for ticket in tickets
+    )
+
+    category_counts = Counter(
+        dropdown_name(ticket.get("category"))
+        for ticket in tickets
+    )
+
+    return {
+        "totals": totals,
+        "status_counts": dict(status_counts),
+        "category_counts": dict(category_counts),
+    }
 
 def main():
     data = collect_data(create_client())
