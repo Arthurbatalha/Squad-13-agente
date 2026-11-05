@@ -21,36 +21,43 @@ def mock_module(monkeypatch, name, **attributes):
 
 
 @pytest.mark.parametrize("has_results", [True, False])
-def test_main_displays_search_results(monkeypatch, capsys, has_results):
-    results = [
+def test_main_reports_article_collection(monkeypatch, capsys, has_results):
+    articles = [
         {
             "id": 1,
             "title": "VPN no Windows",
             "content": "Abra as configurações de VPN.",
-            "score": 0.9,
+            "date_mod": "2026-11-04 10:00:00",
+            "source_reference": "/Knowledgebase/Article",
         }
     ] if has_results else []
 
-    # Fornece configurações fictícias para o teste, sem chamar serviços reais.
-    monkeypatch.setenv("GLPI_CLIENT_ID", "test-client")
-    monkeypatch.setenv("GLPI_CLIENT_SECRET", "test-secret")
-    monkeypatch.setenv("GLPI_BASE_URL_V1", "http://localhost:8080/api.php")
-    monkeypatch.setenv("GLPI_BASE_URL_V2", "http://localhost:8080/api.php/v2")
-    monkeypatch.setenv("APP_TIMEZONE", "America/Fortaleza")
-    mock_module(monkeypatch, "dotenv", load_dotenv=lambda *args, **kwargs: None)
+    # Configuração fictícia: não lê o .env real.
+    settings = MagicMock(
+        glpi_base_url_v2="http://glpi.test/api.php/v2",
+        glpi_client_id="test-client",
+        glpi_client_secret="test-secret",
+    )
 
-    # Evita autenticação e consultas ao GLPI.
+    mock_module(
+        monkeypatch,
+        "src.config",
+        load_settings=MagicMock(return_value=settings),
+    )
+
+    # Simula autenticação, sem acessar o GLPI.
     mock_module(
         monkeypatch,
         "src.glpi_integration.auth",
-        fazer_login=lambda *args, **kwargs: {
-            "access_token": "fake-access-token",
-            "refresh_token": "fake-refresh-token",
-        },
+        fazer_login=MagicMock(
+            return_value={
+                "access_token": "fake-access-token",
+                "refresh_token": "fake-refresh-token",
+            }
+        ),
     )
 
     client = MagicMock()
-    client.search_all.return_value = []
 
     mock_module(
         monkeypatch,
@@ -58,11 +65,13 @@ def test_main_displays_search_results(monkeypatch, capsys, has_results):
         GLPIClient=MagicMock(return_value=client),
     )
 
-    # Simula o contrato devolvido pela recuperação.
+    # Simula o coletor que o main.py utiliza atualmente.
+    collect_articles = MagicMock(return_value=articles)
+
     mock_module(
         monkeypatch,
-        "src.rag.busca_artigos",
-        buscar_artigos=lambda *args, **kwargs: results,
+        "src.rag.article_source",
+        source_treatment=collect_articles,
     )
 
     runpy.run_path(
@@ -72,15 +81,15 @@ def test_main_displays_search_results(monkeypatch, capsys, has_results):
 
     output = capsys.readouterr().out
 
+    collect_articles.assert_called_once_with(client)
+    assert "Erro na coleta de artigos:" not in output
+
     if has_results:
-        assert "ID: 1" in output
-        assert "Título: VPN no Windows" in output
-        assert "Conteúdo: Abra as configurações de VPN." in output
-        assert "Pontuação: 0.9" in output
-        assert "Nenhum artigo relevante encontrado." not in output
+        assert "Artigos Carregados:1" in output
+        assert "a base de artigos está vazia" not in output
     else:
-        assert "Nenhum artigo relevante encontrado." in output
-        assert "ID:" not in output
+        assert "Coleta bem-sucedida, mas a base de artigos está vazia." in output
+        assert "Artigos Carregados:" not in output
 
 
 @pytest.mark.parametrize("has_results", [True, False])
