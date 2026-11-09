@@ -13,6 +13,19 @@ from src.glpi_integration.auth import fazer_login
 from src.glpi_integration.GLPI_Client import GLPIClient
 from src.rag.article_source import source_treatment
 
+def build_session_service():
+    """Crie uma instância compartilhada no lifespan da aplicação FastAPI."""
+    from scripts.coletar_dados import create_client
+    from src.sessions import SessionService
+
+    settings = load_settings(require_glpi=True)
+
+    def read_users():
+        return create_client().search_all("/Administration/User")
+
+    return SessionService(read_users, integration_username=settings.glpi_username)
+
+
 if __name__ == "__main__":
 
     settings = load_settings(require_glpi=True)
