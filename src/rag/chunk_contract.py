@@ -1,10 +1,10 @@
-"""Contrato da ING-01; a implementação da preparação será integrada na Área 3."""
+"""Contrato da preparação ING-01, implementado em src.rag.preparation."""
 
 from typing import Literal, Protocol, TypedDict
 
 
 SourceType = Literal["article", "case"]
-PREPARATION_VERSION = "ing-01-v1"
+PREPARATION_VERSION = "ing-01-v2"
 MINILM_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 # Limite do SentenceTransformer, incluindo tokens especiais (não os 512 do tokenizer).
 MINILM_MAX_TOKENS = 128
@@ -46,7 +46,7 @@ class PreparationTokenizer(Protocol):
 
 
 class PrepareSource(Protocol):
-    """Assinatura prevista para src.rag.preparation.prepare_source, ainda pendente.
+    """Assinatura de src.rag.preparation.prepare_source.
 
     Recebe o tokenizer real do MiniLM por injeção, sem carregar embeddings.
     O orçamento se aplica ao content final de cada trecho, sem truncamento.
