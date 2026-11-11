@@ -1,4 +1,5 @@
 node_modules/
+frontend/dist/
 lab/.env
 *.log
 .DS_Store

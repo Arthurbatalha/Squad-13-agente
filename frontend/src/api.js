@@ -28,14 +28,35 @@ async function request(path, options = {}) {
   }
   const body = await response.json().catch(() => null);
   if (!response.ok) throw new ApiError(response.status, body?.error);
+  if (!body || typeof body !== "object")
+    throw new ApiError(502, {
+      code: "invalid_response",
+      message: "Leitura incompleta da resposta do servidor.",
+    });
   return body;
 }
 
-const post = (path, data) => request(path, { method: "POST", body: JSON.stringify(data) });
+const post = (path, data) =>
+  request(path, { method: "POST", body: JSON.stringify(data) });
 
 export const getCharacters = () => request("/api/characters");
-export const createSession = (characterId) => post("/api/sessions", { character_id: characterId });
-export const getSession = (threadId) => request(`/api/sessions/${threadId}`);
-export const sendMessage = (threadId, text) => post(`/api/sessions/${threadId}/messages`, { text });
-export const sendDecision = (threadId, { action_id, version, decision, text }) =>
-  post(`/api/sessions/${threadId}/decisions`, { action_id, version, decision, text });
+export const createSession = (characterId) =>
+  post("/api/sessions", { character_id: characterId });
+export const getSession = (threadId) =>
+  request(`/api/sessions/${encodeURIComponent(threadId)}`);
+export const switchSession = (threadId, characterId) =>
+  post(`/api/sessions/${encodeURIComponent(threadId)}/switch`, {
+    character_id: characterId,
+  });
+export const sendMessage = (threadId, text) =>
+  post(`/api/sessions/${encodeURIComponent(threadId)}/messages`, { text });
+export const sendDecision = (
+  threadId,
+  { action_id, version, decision, text },
+) =>
+  post(`/api/sessions/${encodeURIComponent(threadId)}/decisions`, {
+    action_id,
+    version,
+    decision,
+    text,
+  });

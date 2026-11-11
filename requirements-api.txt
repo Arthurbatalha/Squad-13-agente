@@ -3,3 +3,6 @@ fastapi>=0.115
 uvicorn[standard]>=0.30
 httpx>=0.27        # exigido pelo TestClient
 pytest>=8.0
+# UI-02 reutiliza SessionService; seus módulos importam configuração e cliente.
+requests>=2.32
+python-dotenv>=1.0
