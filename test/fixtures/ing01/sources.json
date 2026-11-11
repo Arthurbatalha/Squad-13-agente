@@ -1,0 +1,24 @@
+[
+  {
+    "fixture": true,
+    "source_type": "article",
+    "id": 91001,
+    "title": "VPN indisponível",
+    "source_reference": "/Knowledgebase/Article",
+    "html_file": "article.html",
+    "marker": "ARTIGO-FIXTURE-91001",
+    "error_code": "VPN-FIX-691",
+    "steps": ["Abra o cliente VPN.", "Confira o erro", "Reconecte a VPN."]
+  },
+  {
+    "fixture": true,
+    "source_type": "case",
+    "id": 92002,
+    "title": "VPN indisponível",
+    "source_reference": "/Assistance/Ticket",
+    "html_file": "case.html",
+    "marker": "CASO-FIXTURE-92002",
+    "error_code": "VPN-FIX-809",
+    "steps": ["Feche o cliente VPN.", "Confira o erro", "Reabra o cliente VPN."]
+  }
+]
