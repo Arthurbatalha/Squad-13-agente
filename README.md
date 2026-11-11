@@ -133,3 +133,90 @@ está sendo implementado nesta task de ambiente.
 validados + documentação revisada + revisão e PR acordado para `dev_v2`.
 A integração real com GLPI e o ensaio com Gemini exigem validação em suas
 respectivas entregas; não afirmar que ocorreram apenas com esses testes.
+
+## Diagnóstico do laboratório — GLPI-05
+
+O script `scripts/coletar_dados.py` utiliza o cliente GLPI comum e a
+configuração central para gerar um diagnóstico da instância consultada.
+
+### Configuração
+
+O arquivo `.env` da raiz deve conter os valores válidos de:
+
+- `GLPI_BASE_URL_V1`
+- `GLPI_BASE_URL_V2`
+- `GLPI_CLIENT_ID`
+- `GLPI_CLIENT_SECRET`
+
+Configure também `GLPI_USERNAME` e `GLPI_PASSWORD` conforme o laboratório.
+Não inclua credenciais nos commits.
+
+O arquivo `lab/.env` configura o laboratório Docker e tem finalidade
+diferente do `.env` da aplicação.
+
+### Gerar o relatório
+
+Com o laboratório iniciado e as dependências Python instaladas, execute
+na raiz do projeto:
+
+```bash
+source .venv/bin/activate
+python -m scripts.coletar_dados --glpi-version 11.0.8
+```
+
+Substitua `11.0.8` pela versão conferida na instância. Esse argumento é
+informado pelo operador; o script não detecta a versão automaticamente.
+
+O resultado é salvo em [docs/diagnostico-glpi.md](docs/diagnostico-glpi.md),
+com instante e escopo da coleta, totais, distribuições por status e
+categoria e exemplos JSON com os textos de nome e conteúdo omitidos.
+
+As contagens são calculadas a partir da API. Não são valores fixos
+copiados do seed e podem mudar conforme o estado do laboratório.
+
+### Evidências da validação
+
+Implementação registrada no commit `3fa987e`.
+
+Testes automatizados:
+
+```bash
+python -m pytest -q test
+```
+
+Resultado informado na execução: `57 passed in 0.37s`.
+
+Coleta real realizada com `--glpi-version 11.0.8`:
+
+| Coleção | Registros | Páginas |
+|---|---:|---:|
+| Chamados | 300 | 12 |
+| Categorias | 6 | 1 |
+| Usuários | 21 | 1 |
+| Artigos | 40 | 2 |
+
+As quatro coleções foram informadas como completas pelo script.
+
+### Falha controlada de conexão
+
+Após gerar um relatório válido, foi executado:
+
+```bash
+sha256sum docs/diagnostico-glpi.md
+
+GLPI_BASE_URL_V1=http://127.0.0.1:1/api.php \
+GLPI_BASE_URL_V2=http://127.0.0.1:1/api.php/v2 \
+python -m scripts.coletar_dados --glpi-version 11.0.8
+
+echo "Código de saída: $?"
+sha256sum docs/diagnostico-glpi.md
+```
+
+Resultado observado: `ConnectionError`, código de saída `1` e mensagem
+informando que nenhum relatório novo foi publicado. Os hashes antes e
+depois foram iguais, comprovando a preservação do relatório existente.
+
+Esse cenário utiliza uma URL inacessível apenas naquela execução.
+A coleta real, os testes automatizados com simulações e a falha
+controlada são evidências distintas. Não foi realizado ensaio Gemini
+nesta validação.
