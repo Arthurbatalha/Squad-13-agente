@@ -64,14 +64,6 @@ class PendingAction(StrictModel):
     preview_text: str  # texto exato mostrado ao usuário; deve corresponder ao payload
 
 
-class SessionInfo(StrictModel):
-    thread_id: str
-    role: Literal["staff"] = "staff"
-    character: StaffCharacter
-    adapter: Literal["mock", "real"]
-    pending_action: Optional[PendingAction] = None
-
-
 # --------------------------------------------------------------------------
 # Fontes e respostas da conversa
 # --------------------------------------------------------------------------
@@ -109,6 +101,16 @@ class WriteResultReply(StrictModel):
     status: Literal["succeeded", "partial", "uncertain", "cancelled"]
     ticket_id: Optional[int] = None  # preservado em falha parcial
     message: str
+
+
+class SessionInfo(StrictModel):
+    thread_id: str
+    role: Literal["staff"] = "staff"
+    character: StaffCharacter
+    adapter: Literal["mock", "real"]
+    pending_action: Optional[PendingAction] = None
+    # UI-02: reconciliação após perda de resposta; não é histórico nem checkpoint.
+    last_write_result: Optional[WriteResultReply] = None
 
 
 ChatReply = Annotated[

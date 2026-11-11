@@ -134,6 +134,10 @@ def create_app(
     def get_session(thread_id: str):
         return backend.get_session(thread_id)
 
+    @app.post("/api/sessions/{thread_id}/switch", response_model=SessionInfo, responses=_ERRORS)
+    def switch_session(thread_id: str, body: CreateSessionRequest):
+        return backend.switch_session(thread_id, body.character_id)
+
     @app.post(
         "/api/sessions/{thread_id}/messages",
         response_model=MessageResponse,

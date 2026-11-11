@@ -10,6 +10,7 @@ Gatilhos (texto contém, sem acentos/caixa):
   "vpn"            -> resposta com fonte
   "impressora"     -> pedido de esclarecimento
   "indisponivel"   -> índice indisponível
+  "abrir simular parcial" / "abrir simular incerto" -> desfechos controlados
   qualquer outro   -> sem evidência
 Com ação pendente, "sim"/"não" decidem; qualquer outra coisa é recusada (409)
 e nada é gravado.
@@ -23,6 +24,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from src.api.backend import ChatBackendError
+from src.glpi_integration.GLPI_Client import GLPICollection
+from src.sessions import SessionService
 from src.api.schemas import (
     ChatReply,
     ClarificationReply,
@@ -78,8 +81,11 @@ def _render_preview(operation: str, payload) -> str:
 class _Session:
     thread_id: str
     character: StaffCharacter
+    session_id: str  # credencial SES-01 exclusivamente interna ao mock
     pending: Optional[PendingAction] = None
     results: dict[str, WriteResultReply] = field(default_factory=dict)
+    result_versions: dict[str, int] = field(default_factory=dict)
+    last_write_result: Optional[WriteResultReply] = None
 
 
 class MockChatBackend:
@@ -89,6 +95,14 @@ class MockChatBackend:
         self._sessions: dict[str, _Session] = {}
         self._lock = threading.RLock()
         self._next_ticket_id = 9001
+        # Exercita SES-01 sem consultar GLPI: os IDs continuam sendo fixtures.
+        self._session_service = SessionService(
+            lambda: GLPICollection("/Administration/User", [
+                {"id": 101, "username": "ana.ribeiro"},
+                {"id": 102, "username": "bruno.tavares"},
+            ], 2, 1),
+            integration_username="glpi",
+        )
 
     # ----- sessões -------------------------------------------------------
     def list_characters(self) -> list[StaffCharacter]:
@@ -101,7 +115,22 @@ class MockChatBackend:
                 "character_not_found", "Personagem desconhecido.", status_code=404
             )
         with self._lock:
-            session = _Session(thread_id=uuid.uuid4().hex, character=character)
+            session_id, view = self._session_service.start(staff_user_id=character_id)
+            session = _Session(thread_id=view["thread_id"], character=character, session_id=session_id)
+            self._sessions[session.thread_id] = session
+            return self._info(session)
+
+    def switch_session(self, thread_id: str, character_id: int) -> SessionInfo:
+        with self._lock:
+            previous = self._get(thread_id)
+            character = next((c for c in _CHARACTERS if c.id == character_id), None)
+            if character is None:
+                raise ChatBackendError("character_not_found", "Personagem desconhecido.", 404)
+            session_id, view = self._session_service.switch(
+                previous.session_id, thread_id, staff_user_id=character_id,
+            )
+            session = _Session(view["thread_id"], character, session_id)
+            del self._sessions[thread_id]  # descarta pendência e resultados do contexto anterior
             self._sessions[session.thread_id] = session
             return self._info(session)
 
@@ -114,7 +143,8 @@ class MockChatBackend:
         with self._lock:
             session = self._get(thread_id)
             if session.pending is not None:
-                answer = _normalize(text)
+                # Mantém a rota legada, mas perguntas como “sim?” não confirmam.
+                answer = _normalize(text) if re.fullmatch(r"\w+[.!]?", text.strip()) else ""
                 pending = session.pending
                 if answer in _YES:
                     return self._decide(session, pending.action_id, pending.version, "yes", None)
@@ -149,6 +179,7 @@ class MockChatBackend:
             character=session.character,
             adapter=self.adapter,
             pending_action=session.pending,
+            last_write_result=session.last_write_result,
         )
 
     def _new_action(self, session: _Session, operation: str, payload) -> PendingAction:
@@ -161,6 +192,7 @@ class MockChatBackend:
             preview_text=_render_preview(operation, payload),
         )
         session.pending = action
+        self._session_service.set_pending(session.session_id, session.thread_id, action_id=action.action_id)
         return action
 
     def _route(self, session: _Session, text: str) -> ChatReply:
@@ -216,6 +248,8 @@ class MockChatBackend:
     ) -> ChatReply:
         # Confirmação repetida devolve o resultado já registrado, sem reexecutar.
         if action_id in session.results:
+            if session.result_versions[action_id] != version:
+                raise ChatBackendError("stale_action_version", "A ação mudou; confira a versão atual.", 409)
             return session.results[action_id]
 
         pending = session.pending
@@ -248,6 +282,18 @@ class MockChatBackend:
                 ticket_id=ticket_id,
                 message="[simulado] Ação concluída. Nenhuma chamada ao GLPI foi feita.",
             )
+            # Fixtures de demonstração: não representam uma execução no GLPI.
+            description = pending.payload.description if pending.operation == "open_ticket" else pending.payload.text
+            if "simular parcial" in _normalize(description):
+                result = result.model_copy(update={
+                    "status": "partial",
+                    "message": "[simulado] Chamado criado; uma etapa posterior falhou. Confira antes de repetir.",
+                })
+            elif "simular incerto" in _normalize(description):
+                result = result.model_copy(update={
+                    "status": "uncertain", "ticket_id": None,
+                    "message": "[simulado] Não foi possível determinar o resultado. Verifique antes de repetir.",
+                })
         else:  # "edit": nova versão, exige nova confirmação
             if pending.operation == "open_ticket":
                 payload = pending.payload.model_copy(update={"description": text})
@@ -264,5 +310,8 @@ class MockChatBackend:
             return PreviewReply(action=edited)
 
         session.pending = None
+        self._session_service.clear_pending(session.session_id, session.thread_id, action_id=action_id)
         session.results[action_id] = result
+        session.result_versions[action_id] = version
+        session.last_write_result = result
         return result
