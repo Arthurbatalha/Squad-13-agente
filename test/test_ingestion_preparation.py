@@ -15,12 +15,11 @@ from src.glpi_integration.GLPI_Client import GLPICollection
 from src.rag.article_source import source_treatment
 from src.rag.preparation import prepare_source as prepare
 from src.rag.chunk_contract import (
-    MINILM_MAX_TOKENS, MINILM_MODEL, PREPARATION_VERSION, PrepareSource,
+    MINILM_MAX_TOKENS, MINILM_MODEL, MINILM_REVISION, PREPARATION_VERSION, PrepareSource,
 )
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "ing01"
-MINILM_REVISION = "e8f8c211226b894fcb81acc59f3b34ba3efd5f42"
 
 
 @pytest.fixture

@@ -6,6 +6,7 @@ from typing import Literal, Protocol, TypedDict
 SourceType = Literal["article", "case"]
 PREPARATION_VERSION = "ing-01-v2"
 MINILM_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+MINILM_REVISION = "e8f8c211226b894fcb81acc59f3b34ba3efd5f42"
 # Limite do SentenceTransformer, incluindo tokens especiais (não os 512 do tokenizer).
 MINILM_MAX_TOKENS = 128
 

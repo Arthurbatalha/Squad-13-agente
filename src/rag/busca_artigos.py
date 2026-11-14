@@ -1,14 +1,14 @@
 import html
 import re
 from typing import Any, Iterable
-from sentence_transformers import SentenceTransformer
+from src.rag.chunk_contract import MINILM_MODEL
+from src.rag.corpus import PreparedCorpus, get_search_service, validate_query
 
-MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
-model_embbendings = SentenceTransformer(MODEL)
+MODEL = MINILM_MODEL
 
 
 def remover_html(texto: Any) -> str:
-    """Converte o conteúdo HTML do artigo do GLPI para texto simples."""
+    """Helper legado; a busca usa agora o preparador html2text da ING-01."""
     if texto is None:
         return ""
 
@@ -23,6 +23,7 @@ def remover_html(texto: Any) -> str:
     return "\n".join(linha for linha in linhas if linha)
 
 def create_chunks(text, chunk_lenght=120, overlap=30):
+    """Helper legado por palavras; não é usado para gerar embeddings da ING-02."""
 
     words = text.split()
     if not words:
@@ -39,61 +40,19 @@ def create_chunks(text, chunk_lenght=120, overlap=30):
     ]
 
 
-def buscar_artigos(question: str, articles: Iterable[dict[str, Any]], limit: int = 3):
+def buscar_artigos(question: str, articles: Iterable[dict[str, Any]] | PreparedCorpus,
+                   limit: int = 3, *, service=None):
+    """Busca pública: prepara uma vez e codifica somente cada pergunta posterior.
 
-    if limit < 0 or not question:
+    Uma instância compartilhada é usada por padrão. O chamador também pode
+    injetar CorpusService ou passar um PreparedCorpus já gerado. Erros não são
+    convertidos em corpus vazio; a publicação anterior sobrevive a uma falha.
+    """
+    if not validate_query(question, limit):
         return []
-
-    articles_list = list(articles or [])
-
-    chunks = []
-    chunk_article_indexes = []
-
-    for article_index, article in enumerate(articles_list):
-        title = article.get("name", "")
-        content = remover_html(article.get("content", ""))
-
-        full_text = f"{title}. {content}"
-
-        for chunk in create_chunks(full_text):
-            chunks.append(chunk)
-            chunk_article_indexes.append(article_index)
-
-    if not chunks:
-        return[]
-
-    codyfying_texts = [question, *chunks]
-
-    embbedings = model_embbendings.encode(
-        codyfying_texts,
-        normalize_embeddings=True,
-        show_progress_bar=True
-    )
-
-    semantic_scores = embbedings[1:] @ embbedings[0]
-
-    top_articles = {}
-    for score, article_indx in zip(semantic_scores, chunk_article_indexes):
-        float_score = float(score)
-        if article_indx not in top_articles or float_score > top_articles[article_indx]:
-            top_articles[article_indx] = float_score
-
-    MIN_SIMILARITY = 0.45
-    res = []
-
-    for article_indx, max_score in top_articles.items():
-        if max_score >= MIN_SIMILARITY:
-            original_article = articles_list[article_indx]
-            res.append({
-                "id":original_article.get("id"),
-                "title": original_article.get("name", ""),
-                "content": remover_html(original_article.get("content", "")),
-                "score": max_score
-
-            })
-
-    res.sort(key=lambda x: x["score"], reverse=True)
-    return res[:limit]
+    search = service if service is not None else get_search_service()
+    corpus = articles if isinstance(articles, PreparedCorpus) else search.prepare_articles(articles)
+    return search.search(question, corpus=corpus, limit=limit)
 
 
 if __name__ == "__main__":
@@ -120,7 +79,7 @@ if __name__ == "__main__":
         for resultado in resultados:
             print(
                 f"ID: {resultado['id']} | "
-                f"Pontuação: {resultado['score']} | "
+                f"Pontuação: {resultado['score']:.3f} | "
                 f"Título: {resultado['title']}"
             )
             print(f"Conteúdo: {resultado['content']}")
