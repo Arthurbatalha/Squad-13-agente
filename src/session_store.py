@@ -1,6 +1,6 @@
 import sqlite3
 import json
-from config import STATE_FILE
+from src.config import STATE_FILE
 
 def init_db(): # Garante que os dados existam na database
 
