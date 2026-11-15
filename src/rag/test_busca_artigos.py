@@ -15,10 +15,25 @@ except ImportError:
     from src.rag.artigos_teste import artigos
 
 
-def testar_vpn_windows():
+import pytest
+from src.rag.corpus import CorpusService
+from src.rag.embeddings import EmbeddingService
+from test.embedding_fakes import ModelSpy, unit
+
+
+@pytest.fixture
+def search():
+    def vector(text):
+        key = text.casefold()
+        index = 0 if "windows" in key else 1 if "macos" in key else 3 if "cafeteira" in key else 2
+        return unit(index)
+    return CorpusService(EmbeddingService(model=ModelSpy(vector)))
+
+
+def test_vpn_windows(search):
     resultados = buscar_artigos(
         "Como configurar a VPN no Windows?",
-        artigos,
+        artigos, service=search,
     )
 
     assert resultados
@@ -27,10 +42,10 @@ def testar_vpn_windows():
     assert resultados[0]["content"] != ""
 
 
-def testar_vpn_macos():
+def test_vpn_macos(search):
     resultados = buscar_artigos(
         "Como configurar a VPN no macOS?",
-        artigos,
+        artigos, service=search,
     )
 
     assert resultados
@@ -39,17 +54,15 @@ def testar_vpn_macos():
     assert resultados[0]["content"] != ""
 
 
-def testar_pergunta_sem_resposta():
+def test_pergunta_sem_resposta(search):
     resultados = buscar_artigos(
         "Como configurar uma cafeteira?",
-        artigos,
+        artigos, service=search,
     )
 
     assert resultados == []
 
 
 if __name__ == "__main__":
-    testar_vpn_windows()
-    testar_vpn_macos()
-    testar_pergunta_sem_resposta()
-    print("Todos os testes passaram com sucesso!")
+    for question in ("Como configurar a VPN no Windows?", "Como configurar a VPN no macOS?"):
+        print(buscar_artigos(question, artigos))

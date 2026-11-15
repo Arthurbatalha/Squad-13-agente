@@ -96,19 +96,20 @@ def test_main_reports_article_collection(monkeypatch, capsys, has_results):
 def test_search_example_displays_results(monkeypatch, capsys, has_results):
     # Simula os resultados do cálculo de similaridade.
     # O modelo real não é carregado nem baixado.
-    scores = [0.9, 0.1] if has_results else [0.1, 0.1]
+    import numpy as np
+    from src.rag.corpus import CorpusService
+    from src.rag.embeddings import EmbeddingService
+    from test.embedding_fakes import ModelSpy, unit
 
-    embeddings = MagicMock()
-    embeddings.__getitem__.return_value.__matmul__.return_value = scores
+    def vector(text):
+        if text.startswith("Estou usando"):
+            result = np.zeros(384)
+            result[:3] = [0.9, np.sqrt(0.19), 0] if has_results else [0.1, 0.1, np.sqrt(0.98)]
+            return result
+        return unit(1 if "IKEv2" in text else 0)
 
-    model = MagicMock()
-    model.encode.return_value = embeddings
-
-    mock_module(
-        monkeypatch,
-        "sentence_transformers",
-        SentenceTransformer=MagicMock(return_value=model),
-    )
+    search = CorpusService(EmbeddingService(model=ModelSpy(vector)))
+    monkeypatch.setattr("src.rag.corpus.get_search_service", lambda: search)
 
     runpy.run_path(
         str(PROJECT_ROOT / "src" / "rag" / "busca_artigos.py"),

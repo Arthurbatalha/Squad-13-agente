@@ -1,0 +1,223 @@
+{
+  "utc": "2026-11-14T22:44:33.030187+00:00",
+  "system": "Linux-7.3.3-200.fc44.x86_64-x86_64-with-glibc2.43",
+  "python": "3.14.10",
+  "cpu": "AMD Ryzen 5 3500U with Radeon Vega Mobile Gfx",
+  "logical_cpus": 8,
+  "threads": 2,
+  "batch_size": 2,
+  "device": "cpu",
+  "versions": {
+    "sentence-transformers": "6.1.0",
+    "torch": "2.15.0+cpu",
+    "transformers": "5.22.2",
+    "tokenizers": "0.23.3",
+    "numpy": "2.5.4",
+    "psutil": "7.2.2",
+    "html2text": "2025.4.15",
+    "huggingface-hub": "1.33.0",
+    "scikit-learn": "1.9.1"
+  },
+  "weights": {
+    "revision": "e8f8c211226b894fcb81acc59f3b34ba3efd5f42",
+    "snapshot": "/home/anthonny/.cache/huggingface/hub/models--sentence-transformers--paraphrase-multilingual-MiniLM-L12-v2/snapshots/e8f8c211226b894fcb81acc59f3b34ba3efd5f42",
+    "mode": "local_cache_only",
+    "download_seconds": null,
+    "cache_lookup_seconds": 0.000807320000603795,
+    "note": "Sem --download não há transferência de pesos; a carga é medida separadamente."
+  },
+  "load_seconds": 13.290141271999346,
+  "runtime": {
+    "max_seq_length": 128,
+    "tokenizer_model_max_length": 128,
+    "dimension": 384,
+    "weights_and_tokenizer_snapshot": "/home/anthonny/.cache/huggingface/hub/models--sentence-transformers--paraphrase-multilingual-MiniLM-L12-v2/snapshots/e8f8c211226b894fcb81acc59f3b34ba3efd5f42"
+  },
+  "fixture": {
+    "synthetic_fixture": true,
+    "sources": 3,
+    "chunks": 4,
+    "preparation_seconds": 0.030950872999710555,
+    "corpus_encoding_seconds": 0.574289494000368,
+    "chunk_tokens": [
+      43,
+      44,
+      125,
+      125
+    ],
+    "vectors_bytes": 6144,
+    "metadata": {
+      "embedding": {
+        "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "revision": "e8f8c211226b894fcb81acc59f3b34ba3efd5f42",
+        "dimension": 384,
+        "normalize": true,
+        "max_tokens": 128,
+        "input_format": "plain-text",
+        "precision": "float32",
+        "device": "cpu"
+      },
+      "preparation_version": "ing-01-v2",
+      "chunk_ids": [
+        "ing-01-v2:article:91001:0000",
+        "ing-01-v2:case:92002:0000",
+        "ing-01-v2:article:93003:0000",
+        "ing-01-v2:article:93003:0001"
+      ]
+    },
+    "vectors_finite": true,
+    "norm_min": 1.0,
+    "norm_max": 1.0,
+    "queries": [
+      {
+        "question": "O que conferir quando aparece o erro VPN-FIX-691?",
+        "seconds": 0.07796883500031981,
+        "tokens": 16,
+        "hits": [
+          {
+            "id": 91001,
+            "source_type": "article",
+            "chunk_id": "ing-01-v2:article:91001:0000",
+            "score": 0.804905891418457
+          },
+          {
+            "id": 93003,
+            "source_type": "article",
+            "chunk_id": "ing-01-v2:article:93003:0000",
+            "score": 0.7770456075668335
+          },
+          {
+            "id": 92002,
+            "source_type": "case",
+            "chunk_id": "ing-01-v2:case:92002:0000",
+            "score": 0.7528018355369568
+          }
+        ]
+      },
+      {
+        "question": "Como reconectar o cliente VPN após o erro VPN-FIX-809?",
+        "seconds": 0.09140350999950897,
+        "tokens": 19,
+        "hits": [
+          {
+            "id": 92002,
+            "source_type": "case",
+            "chunk_id": "ing-01-v2:case:92002:0000",
+            "score": 0.7643799781799316
+          },
+          {
+            "id": 91001,
+            "source_type": "article",
+            "chunk_id": "ing-01-v2:article:91001:0000",
+            "score": 0.753433883190155
+          },
+          {
+            "id": 93003,
+            "source_type": "article",
+            "chunk_id": "ing-01-v2:article:93003:0000",
+            "score": 0.7145233750343323
+          }
+        ]
+      }
+    ],
+    "stats_before_queries": {
+      "model_loads": 1,
+      "document_batches": 2,
+      "document_texts": 4,
+      "question_batches": 0,
+      "question_texts": 0
+    },
+    "stats_after_queries": {
+      "model_loads": 1,
+      "document_batches": 2,
+      "document_texts": 4,
+      "question_batches": 2,
+      "question_texts": 2
+    },
+    "document_vectors_reused": true,
+    "oversized_input": {
+      "tokens": 642,
+      "question_rejected": true,
+      "document_rejected": true,
+      "encoder_calls_unchanged": true
+    }
+  },
+  "glpi": {
+    "executed": true,
+    "read_only": true,
+    "sources": 40,
+    "chunks": 82,
+    "collection_seconds": 2.484883075999278,
+    "preparation_and_encoding_seconds": 12.357884551000097,
+    "max_chunk_tokens": 128,
+    "queries": [
+      {
+        "question": "Como configurar a VPN no Windows?",
+        "seconds": 0.05461087399999087,
+        "tokens": 9,
+        "hits": [
+          {
+            "id": 1,
+            "source_type": "article",
+            "chunk_id": "ing-01-v2:article:1:0000",
+            "score": 0.6928931474685669
+          },
+          {
+            "id": 2,
+            "source_type": "article",
+            "chunk_id": "ing-01-v2:article:2:0000",
+            "score": 0.5347427129745483
+          }
+        ]
+      },
+      {
+        "question": "Como instalar uma impressora de rede?",
+        "seconds": 0.05079174200000125,
+        "tokens": 10,
+        "hits": [
+          {
+            "id": 5,
+            "source_type": "article",
+            "chunk_id": "ing-01-v2:article:5:0000",
+            "score": 0.594231128692627
+          },
+          {
+            "id": 21,
+            "source_type": "article",
+            "chunk_id": "ing-01-v2:article:21:0000",
+            "score": 0.5688791871070862
+          },
+          {
+            "id": 17,
+            "source_type": "article",
+            "chunk_id": "ing-01-v2:article:17:0000",
+            "score": 0.5213428139686584
+          }
+        ]
+      }
+    ],
+    "stats_before_queries": {
+      "model_loads": 1,
+      "document_batches": 43,
+      "document_texts": 86,
+      "question_batches": 2,
+      "question_texts": 2
+    },
+    "stats_after_queries": {
+      "model_loads": 1,
+      "document_batches": 43,
+      "document_texts": 86,
+      "question_batches": 4,
+      "question_texts": 4
+    },
+    "document_vectors_reused": true
+  },
+  "memory": {
+    "metric": "RSS instantâneo do processo via psutil; inclui bibliotecas, pesos e runtime; não é pico nem memória exclusiva dos vetores.",
+    "before_load_mib": 57.984375,
+    "after_load_mib": 762.09375,
+    "after_corpus_mib": 854.57421875,
+    "after_fixture_queries_mib": 855.296875,
+    "final_mib": 927.37890625
+  }
+}

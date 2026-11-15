@@ -123,6 +123,11 @@ bibliotecas, mas não baixa modelos nem conecta ao GLPI ou ao Gemini.
 
 ## Contratos da busca e limites da etapa
 
+A implementação vigente de embeddings da Alternativa C está em
+[`docs/ING-02.md`](docs/ING-02.md): MiniLM com revisão fixa, preparação ING-01
+e corpus reutilizável em memória. As referências anteriores a migração E5
+não definem o escopo da ING-02 atual. Persistência continua na ING-03.
+
 Consulte [`docs/contratos-glpi01.md`](docs/contratos-glpi01.md) para o
 formato interno atual (`id`, `title`, `content`, `score`), a diferença em
 relação aos campos da API e as exigências futuras aprovadas para Chroma/E5,
