@@ -8,8 +8,14 @@ regras de autorização ficam no servidor.
 
 import logging
 import os
+import sqlite3
 from pathlib import Path
 from typing import Optional
+from src.session_store import save_session
+from agent_core import build_graph
+from src.config import STATE_FILE
+
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -159,6 +165,9 @@ def create_app(
     # Apresentação: serve o build do React junto da API (npm run build).
     if frontend_dist is not None and Path(frontend_dist).is_dir():
         app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+
+    conn = sqlite3.connect(STATE_FILE, check_same_thread=False)
+    app.state.graph = build_graph(SqliteSaver(conn))
 
     return app
 
