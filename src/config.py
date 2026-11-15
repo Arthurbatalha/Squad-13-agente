@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
+STATE_FILE = PROJECT_ROOT / "data" / "agent_state.sqlite3"
 
 
 @dataclass(frozen=True)
@@ -76,3 +77,4 @@ def load_settings(*, require_glpi: bool = False) -> AppSettings:
         app_timezone=timezone_name,
         timezone=timezone,
     )
+
