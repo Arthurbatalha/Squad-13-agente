@@ -11,9 +11,15 @@ import threading
 import time
 from types import ModuleType
 from unittest.mock import Mock
-
 import numpy as np
 import pytest
+import sys
+
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 
 from src.rag.busca_artigos import buscar_artigos
 from src.rag.chunk_contract import MINILM_MODEL, MINILM_REVISION, PREPARATION_VERSION

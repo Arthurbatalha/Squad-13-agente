@@ -8,9 +8,14 @@ Usuários: 101=cliente A, 102=cliente B, 103=cliente C (sem chamados),
 import copy
 import json
 from pathlib import Path
-
+import sys
 import pytest
 import requests
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 
 from src.glpi_integration.GLPI_Client import GLPICollection
 from src.authorization import (

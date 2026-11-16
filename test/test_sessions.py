@@ -4,9 +4,14 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from unittest.mock import Mock
-
 import pytest
+import sys
+from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+    
 from src.glpi_integration.GLPI_Client import GLPICollection
 from src.sessions import (
     DirectoryUnavailable, InvalidCharacter, PendingConflict, SessionService, SessionUnavailable,

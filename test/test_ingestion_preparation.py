@@ -8,8 +8,15 @@ import json
 from pathlib import Path
 import re
 from unittest.mock import Mock
-
 import pytest
+import sys
+
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+
 
 from src.glpi_integration.GLPI_Client import GLPICollection
 from src.rag.article_source import source_treatment

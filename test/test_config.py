@@ -1,6 +1,16 @@
 """Testes da configuração, sem servidor GLPI ou chave de modelo."""
 
+from pathlib import Path
+import sys
 import pytest
+
+
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+
 
 from src.config import PROJECT_ROOT, load_settings
 

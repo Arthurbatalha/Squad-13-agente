@@ -11,3 +11,4 @@ venv/
 .venv/
 .env
 settings.json/
+data/chroma/

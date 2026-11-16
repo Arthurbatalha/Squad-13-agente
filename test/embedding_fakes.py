@@ -1,6 +1,12 @@
 """Modelo espião sintético: nunca importa SentenceTransformers nem usa rede."""
 
 import numpy as np
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from src.rag.chunk_contract import PREPARATION_VERSION
 
