@@ -16,7 +16,7 @@ psutil==7.2.2
 
 # Stack aprovada para as próximas entregas do MVP (ainda não integrada).
 html2text==2025.4.15
-chromadb==1.5.9
+# chromadb removido: o MVP usa índice local (src/rag/local_index.py), ver ING-03.
 langchain==1.4.6
 langgraph==1.2.12
 langchain-google-genai==4.4.2

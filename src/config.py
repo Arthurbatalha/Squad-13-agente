@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 STATE_FILE = PROJECT_ROOT / "data" / "agent_state.sqlite3"
+INDEX_DIR = PROJECT_ROOT / "data" / "index"
 
 
 @dataclass(frozen=True)
