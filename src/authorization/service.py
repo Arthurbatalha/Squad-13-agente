@@ -38,6 +38,35 @@ class AuthorizationService:
         if not policies.tool_allowed(principal, tool, self._disabled):
             raise ToolDenied()
 
+    def retrieval_source_ids(self, principal, source_type, source_ids) -> frozenset[int]:
+        """Escopo atual do índice, antes do ranking; nunca coleta o corpus.
+
+        Artigos seguem a política de base compartilhada. O catálogo de casos
+        não contém ACL: confere cada original e sua solução pública por ID,
+        sem cache entre consultas. Falha/estado desconhecido não libera o caso.
+        A ingestão continua responsável por publicar só a projeção técnica.
+        """
+        tools = {"article": "search_articles", "case": "similar_cases"}
+        self.authorize_tool(principal, tools.get(source_type))
+        ids = frozenset(i for i in source_ids if type(i) is int and i >= 0)
+        if source_type == "article":
+            return ids
+        allowed = set()
+        for source_id in sorted(ids):
+            try:
+                ticket = self._glpi.get_by_id(TICKETS, source_id)
+                if (not isinstance(ticket, dict) or type(ticket.get("id")) is not int
+                        or ticket.get("id") != source_id
+                        or not policies.can_read_original(principal, ticket)
+                        or not (ticket.get("date_solve") or ticket.get("date_close"))):
+                    continue
+                if projections.project_case(ticket, self._timeline(source_id)):
+                    allowed.add(source_id)
+            except (requests.RequestException, GLPIProtocolError, OSError,
+                    AttributeError, TypeError, ValueError, KeyError):
+                continue
+        return frozenset(allowed)
+
     def ranking_global(self, principal):
         """Bloqueada para todos os papéis."""
         self.authorize_tool(principal, "ranking_global")
