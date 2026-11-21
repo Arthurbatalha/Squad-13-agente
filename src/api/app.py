@@ -178,7 +178,7 @@ def create_app(
     # EST-01: Inicialização da checkpoint database    
     target_file = Path(state_file) if state_file is not None else STATE_FILE 
     target_file.parent.mkdir(parents=True, exist_ok=True)
-    init_db()
+    init_db(target_file)
 
     conn = sqlite3.connect(target_file, check_same_thread=False)
     checkpointer = SqliteSaver(conn)
