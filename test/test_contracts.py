@@ -74,6 +74,10 @@ def test_main_reports_article_collection(monkeypatch, capsys, has_results):
         source_treatment=collect_articles,
     )
 
+    # runpy simula `python src/main.py` sem herdar os argumentos do pytest.
+    monkeypatch.setattr(
+        sys, "argv", [str(PROJECT_ROOT / "src" / "main.py")]
+    )
     runpy.run_path(
         str(PROJECT_ROOT / "src" / "main.py"),
         run_name="__main__",
