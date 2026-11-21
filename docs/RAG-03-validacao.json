@@ -1,0 +1,435 @@
+{
+  "base_commit": "b500cde",
+  "unit_encoder": "simulated",
+  "baseline": {
+    "passed": 343,
+    "warnings": 17,
+    "seconds": 18.79
+  },
+  "retrieval_contract": {
+    "passed": 60,
+    "warnings": 17,
+    "seconds": 1.07
+  },
+  "regressions": {
+    "passed": 297,
+    "warnings": 17,
+    "seconds": 18.54
+  },
+  "full_suite": {
+    "passed": 403,
+    "warnings": 17,
+    "seconds": 21.44,
+    "skipped": 0
+  },
+  "real_minilm": {
+    "synthetic_fixtures": {
+      "utc": "2026-11-21T19:52:31.266947+00:00",
+      "system": "Linux-7.3.4-200.fc44.x86_64-x86_64-with-glibc2.43",
+      "python": "3.14.10",
+      "cpu": "AMD Ryzen 5 3500U with Radeon Vega Mobile Gfx",
+      "logical_cpus": 8,
+      "threads": 2,
+      "batch_size": 8,
+      "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+      "revision": "e8f8c211226b894fcb81acc59f3b34ba3efd5f42",
+      "device": "cpu",
+      "encoder": "real_minilm",
+      "versions": {
+        "sentence-transformers": "6.1.0",
+        "torch": "2.15.0+cpu",
+        "transformers": "5.22.2",
+        "tokenizers": "0.23.3",
+        "numpy": "2.5.4",
+        "psutil": "7.2.2",
+        "huggingface-hub": "1.33.0"
+      },
+      "weights": {
+        "mode": "local_cache_only",
+        "lookup_seconds": 0.0002928319991042372,
+        "download_performed": false
+      },
+      "memory": {
+        "metric": "process RSS MiB; amostras, não pico nem só pesos",
+        "before_load": 66.223,
+        "after_load": 767.805,
+        "after_publication": 860.996,
+        "after_queries": 861.637
+      },
+      "load_seconds": 12.573321279000083,
+      "embedding_config": {
+        "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "revision": "e8f8c211226b894fcb81acc59f3b34ba3efd5f42",
+        "dimension": 384,
+        "normalize": true,
+        "max_tokens": 128,
+        "input_format": "plain-text",
+        "precision": "float32",
+        "device": "cpu"
+      },
+      "runtime": {
+        "max_seq_length": 128,
+        "tokenizer_model_max_length": 128,
+        "dimension": 384,
+        "weights_and_tokenizer_snapshot": "/home/anthonny/.cache/huggingface/hub/models--sentence-transformers--paraphrase-multilingual-MiniLM-L12-v2/snapshots/e8f8c211226b894fcb81acc59f3b34ba3efd5f42"
+      },
+      "data_origin": "synthetic ING-01 article fixtures; not laboratory data",
+      "publication": {
+        "status": "published",
+        "generation": "01795290764361102902-276c36",
+        "sources": 2,
+        "chunks": 3,
+        "scope": "temporary_local_index"
+      },
+      "publication_seconds": 0.5053324670006987,
+      "index": {
+        "generation": "01795290764361102902-276c36",
+        "generation_created_at": "2026-11-21T19:52:44+00:00",
+        "sources": 2,
+        "chunks": 3,
+        "max_chunk_tokens": 125,
+        "shape": [
+          3,
+          384
+        ],
+        "reopened": true,
+        "finite": true,
+        "norm_min": 0.9999999403953552,
+        "norm_max": 1.0
+      },
+      "queries": [
+        {
+          "question": "O que conferir no erro VPN-FIX-691?",
+          "seconds": 0.06707220899988897,
+          "question_tokens": 14,
+          "status": "evidence",
+          "reason": "selected",
+          "collections": {
+            "article": {
+              "state": "available",
+              "generation": "01795290764361102902-276c36",
+              "generation_created_at": "2026-11-21T19:52:44+00:00",
+              "update": {
+                "state": "unknown",
+                "last_attempt_at": null,
+                "last_attempt_result": null,
+                "last_checked_at": null,
+                "last_published_at": null,
+                "observed_generation": null,
+                "last_success_at": null,
+                "source_api_status": "unknown",
+                "error": null
+              }
+            },
+            "case": {
+              "state": "not_published"
+            }
+          },
+          "context_tokens": 421,
+          "hits": [
+            {
+              "chunk_id": "ing-01-v2:article:91001:0000",
+              "source_type": "article",
+              "source_id": 91001,
+              "source_reference": "/Knowledgebase/Article",
+              "generation": "01795290764361102902-276c36",
+              "score": 0.8236123919487,
+              "metric": "cosine_similarity"
+            },
+            {
+              "chunk_id": "ing-01-v2:article:93003:0000",
+              "source_type": "article",
+              "source_id": 93003,
+              "source_reference": "/Knowledgebase/Article",
+              "generation": "01795290764361102902-276c36",
+              "score": 0.796352744102478,
+              "metric": "cosine_similarity"
+            }
+          ]
+        },
+        {
+          "question": "Como abrir o cliente VPN?",
+          "seconds": 0.0769901599996956,
+          "question_tokens": 8,
+          "status": "evidence",
+          "reason": "selected",
+          "collections": {
+            "article": {
+              "state": "available",
+              "generation": "01795290764361102902-276c36",
+              "generation_created_at": "2026-11-21T19:52:44+00:00",
+              "update": {
+                "state": "unknown",
+                "last_attempt_at": null,
+                "last_attempt_result": null,
+                "last_checked_at": null,
+                "last_published_at": null,
+                "observed_generation": null,
+                "last_success_at": null,
+                "source_api_status": "unknown",
+                "error": null
+              }
+            },
+            "case": {
+              "state": "not_published"
+            }
+          },
+          "context_tokens": 421,
+          "hits": [
+            {
+              "chunk_id": "ing-01-v2:article:91001:0000",
+              "source_type": "article",
+              "source_id": 91001,
+              "source_reference": "/Knowledgebase/Article",
+              "generation": "01795290764361102902-276c36",
+              "score": 0.7803984880447388,
+              "metric": "cosine_similarity"
+            },
+            {
+              "chunk_id": "ing-01-v2:article:93003:0000",
+              "source_type": "article",
+              "source_id": 93003,
+              "source_reference": "/Knowledgebase/Article",
+              "generation": "01795290764361102902-276c36",
+              "score": 0.7260997891426086,
+              "metric": "cosine_similarity"
+            }
+          ]
+        }
+      ],
+      "stats_before_read": {
+        "model_loads": 1,
+        "document_batches": 1,
+        "document_texts": 3,
+        "question_batches": 0,
+        "question_texts": 0
+      },
+      "stats_after_read": {
+        "model_loads": 1,
+        "document_batches": 1,
+        "document_texts": 3,
+        "question_batches": 2,
+        "question_texts": 2
+      },
+      "reading_document_encodes": 0,
+      "reading_question_encodes": 2,
+      "validation": "passed",
+      "threshold_provisional": true,
+      "min_similarity": 0.45
+    },
+    "glpi_laboratory": {
+      "utc": "2026-11-21T19:53:11.329726+00:00",
+      "system": "Linux-7.3.4-200.fc44.x86_64-x86_64-with-glibc2.43",
+      "python": "3.14.10",
+      "cpu": "AMD Ryzen 5 3500U with Radeon Vega Mobile Gfx",
+      "logical_cpus": 8,
+      "threads": 2,
+      "batch_size": 8,
+      "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+      "revision": "e8f8c211226b894fcb81acc59f3b34ba3efd5f42",
+      "device": "cpu",
+      "encoder": "real_minilm",
+      "versions": {
+        "sentence-transformers": "6.1.0",
+        "torch": "2.15.0+cpu",
+        "transformers": "5.22.2",
+        "tokenizers": "0.23.3",
+        "numpy": "2.5.4",
+        "psutil": "7.2.2",
+        "huggingface-hub": "1.33.0"
+      },
+      "weights": {
+        "mode": "local_cache_only",
+        "lookup_seconds": 0.00027596200015977956,
+        "download_performed": false
+      },
+      "memory": {
+        "metric": "process RSS MiB; amostras, não pico nem só pesos",
+        "before_load": 66.156,
+        "after_load": 767.211,
+        "after_publication": 948.082,
+        "after_queries": 948.289
+      },
+      "load_seconds": 11.398476832997403,
+      "embedding_config": {
+        "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "revision": "e8f8c211226b894fcb81acc59f3b34ba3efd5f42",
+        "dimension": 384,
+        "normalize": true,
+        "max_tokens": 128,
+        "input_format": "plain-text",
+        "precision": "float32",
+        "device": "cpu"
+      },
+      "runtime": {
+        "max_seq_length": 128,
+        "tokenizer_model_max_length": 128,
+        "dimension": 384,
+        "weights_and_tokenizer_snapshot": "/home/anthonny/.cache/huggingface/hub/models--sentence-transformers--paraphrase-multilingual-MiniLM-L12-v2/snapshots/e8f8c211226b894fcb81acc59f3b34ba3efd5f42"
+      },
+      "data_origin": "GLPI laboratory articles, read-only HTTP",
+      "publication": {
+        "status": "published",
+        "generation": "01795290816065757247-2f0fb9",
+        "sources": 40,
+        "chunks": 82,
+        "error": null,
+        "scope": "temporary_local_index"
+      },
+      "publication_seconds": 13.34560801400221,
+      "index": {
+        "generation": "01795290816065757247-2f0fb9",
+        "generation_created_at": "2026-11-21T19:53:36+00:00",
+        "sources": 40,
+        "chunks": 82,
+        "max_chunk_tokens": 128,
+        "shape": [
+          82,
+          384
+        ],
+        "reopened": true,
+        "finite": true,
+        "norm_min": 0.9999998807907104,
+        "norm_max": 1.0000001192092896
+      },
+      "queries": [
+        {
+          "question": "Como configurar a VPN no Windows?",
+          "seconds": 0.0895808550012589,
+          "question_tokens": 9,
+          "status": "evidence",
+          "reason": "selected",
+          "collections": {
+            "article": {
+              "state": "available",
+              "generation": "01795290816065757247-2f0fb9",
+              "generation_created_at": "2026-11-21T19:53:36+00:00",
+              "update": {
+                "state": "current",
+                "last_attempt_at": "2026-11-21T19:53:22.746180+00:00",
+                "last_attempt_result": "published",
+                "last_checked_at": "2026-11-21T19:53:36.078459+00:00",
+                "last_published_at": "2026-11-21T19:53:36.078459+00:00",
+                "observed_generation": "01795290816065757247-2f0fb9",
+                "last_success_at": "2026-11-21T19:53:36.089338+00:00",
+                "source_api_status": "available",
+                "error": null
+              }
+            },
+            "case": {
+              "state": "not_published"
+            }
+          },
+          "context_tokens": 469,
+          "hits": [
+            {
+              "chunk_id": "ing-01-v2:article:1:0000",
+              "source_type": "article",
+              "source_id": 1,
+              "source_reference": "/Knowledgebase/Article",
+              "generation": "01795290816065757247-2f0fb9",
+              "score": 0.6928931474685669,
+              "metric": "cosine_similarity"
+            },
+            {
+              "chunk_id": "ing-01-v2:article:1:0001",
+              "source_type": "article",
+              "source_id": 1,
+              "source_reference": "/Knowledgebase/Article",
+              "generation": "01795290816065757247-2f0fb9",
+              "score": 0.603113055229187,
+              "metric": "cosine_similarity"
+            }
+          ]
+        },
+        {
+          "question": "Como instalar uma impressora?",
+          "seconds": 0.0904199599972344,
+          "question_tokens": 8,
+          "status": "evidence",
+          "reason": "selected",
+          "collections": {
+            "article": {
+              "state": "available",
+              "generation": "01795290816065757247-2f0fb9",
+              "generation_created_at": "2026-11-21T19:53:36+00:00",
+              "update": {
+                "state": "current",
+                "last_attempt_at": "2026-11-21T19:53:22.746180+00:00",
+                "last_attempt_result": "published",
+                "last_checked_at": "2026-11-21T19:53:36.078459+00:00",
+                "last_published_at": "2026-11-21T19:53:36.078459+00:00",
+                "observed_generation": "01795290816065757247-2f0fb9",
+                "last_success_at": "2026-11-21T19:53:36.089338+00:00",
+                "source_api_status": "available",
+                "error": null
+              }
+            },
+            "case": {
+              "state": "not_published"
+            }
+          },
+          "context_tokens": 626,
+          "hits": [
+            {
+              "chunk_id": "ing-01-v2:article:17:0000",
+              "source_type": "article",
+              "source_id": 17,
+              "source_reference": "/Knowledgebase/Article",
+              "generation": "01795290816065757247-2f0fb9",
+              "score": 0.58940190076828,
+              "metric": "cosine_similarity"
+            },
+            {
+              "chunk_id": "ing-01-v2:article:5:0000",
+              "source_type": "article",
+              "source_id": 5,
+              "source_reference": "/Knowledgebase/Article",
+              "generation": "01795290816065757247-2f0fb9",
+              "score": 0.586353063583374,
+              "metric": "cosine_similarity"
+            },
+            {
+              "chunk_id": "ing-01-v2:article:21:0000",
+              "source_type": "article",
+              "source_id": 21,
+              "source_reference": "/Knowledgebase/Article",
+              "generation": "01795290816065757247-2f0fb9",
+              "score": 0.5656379461288452,
+              "metric": "cosine_similarity"
+            }
+          ]
+        }
+      ],
+      "stats_before_read": {
+        "model_loads": 1,
+        "document_batches": 11,
+        "document_texts": 82,
+        "question_batches": 0,
+        "question_texts": 0
+      },
+      "stats_after_read": {
+        "model_loads": 1,
+        "document_batches": 11,
+        "document_texts": 82,
+        "question_batches": 2,
+        "question_texts": 2
+      },
+      "reading_document_encodes": 0,
+      "reading_question_encodes": 2,
+      "validation": "passed",
+      "threshold_provisional": true,
+      "min_similarity": 0.45
+    }
+  },
+  "pre_pr_review": {
+    "initial_delivery_full_suite_passed": 383,
+    "added_regression_cases": 20,
+    "fixed": [
+      "Required identifiers must match completely, including hyphenated components.",
+      "Markdown-only solution/step labels require an actual instruction in the selected context."
+    ],
+    "encoder": "simulated, with real LocalIndexStore in temporary directories",
+    "real_minilm_measurements": "preserved from the initial validation; not repeated in this textual-support review"
+  }
+}

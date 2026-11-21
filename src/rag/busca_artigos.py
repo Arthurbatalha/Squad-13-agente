@@ -7,6 +7,15 @@ from src.rag.corpus import PreparedCorpus, get_search_service, validate_query
 MODEL = MINILM_MODEL
 
 
+def recuperar_trechos(question, principal, *, retriever, required_evidence=()):
+    """RAG-01: consulta exclusivamente o índice publicado (contrato RAG-03).
+
+    `principal` deve vir de Principal.from_session no servidor. `retriever`
+    é PublishedRetrieval; a busca legada abaixo permanece independente.
+    """
+    return retriever.retrieve(question, principal, required_evidence=required_evidence)
+
+
 def remover_html(texto: Any) -> str:
     """Helper legado; a busca usa agora o preparador html2text da ING-01."""
     if texto is None:

@@ -244,6 +244,39 @@ class SyncRun:
 class SyncRunLedger:
     """Histórico operacional separado dos arquivos publicados do índice."""
 
+    @staticmethod
+    def read_observation(path: str | Path, generation_id: str):
+        """Lê a tentativa e o sucesso da geração capturada, sem criar/migrar DB.
+
+        Uma transação de leitura mantém as duas observações coerentes. Não
+        consulta ACTIVE nem inicia sincronização. Arquivo ausente retorna None.
+        """
+        path = Path(path).resolve()
+        if not path.is_file():
+            return None, None
+        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=1)) as db:
+            db.row_factory = sqlite3.Row
+            db.execute("BEGIN")
+            latest = db.execute(
+                "SELECT * FROM article_sync_runs ORDER BY run_id DESC LIMIT 1"
+            ).fetchone()
+            success = db.execute(
+                "SELECT * FROM article_sync_runs WHERE active_generation = ? "
+                "AND status IN ('published', 'no_changes') ORDER BY run_id DESC LIMIT 1",
+                (generation_id,),
+            ).fetchone()
+
+        def convert(row):
+            if row is None:
+                return None
+            values = dict(row)
+            values.pop("scope")
+            raw_config = values.pop("index_config_json")
+            values["index_config"] = json.loads(raw_config) if raw_config else None
+            return SyncRun(**values)
+
+        return convert(latest), convert(success)
+
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
