@@ -157,6 +157,23 @@ class HealthResponse(StrictModel):
     adapter: Literal["mock", "real"]
 
 
+class IndexStatusResponse(StrictModel):
+    """Estado operacional do snapshot local de artigos, sem conteúdo indexado."""
+
+    scope: Literal["articles"] = "articles"
+    state: Literal["available", "stale", "unavailable"]
+    active_generation: Optional[str] = None
+    last_attempt_at: Optional[str] = None
+    last_attempt_result: Optional[Literal["running", "published", "no_changes", "failed"]] = None
+    last_success_at: Optional[str] = None
+    last_published_at: Optional[str] = None
+    source_api_status: Literal["unknown", "available", "unavailable"] = "unknown"
+    index_config: Optional[dict[str, object]] = None
+    sources_total: Optional[int] = None
+    chunks_total: Optional[int] = None
+    error_code: Optional[str] = None
+
+
 # --------------------------------------------------------------------------
 # Erros
 # --------------------------------------------------------------------------
