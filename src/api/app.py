@@ -11,9 +11,10 @@ import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
-from src.session_store import save_session
-from agent_core import build_graph
+from src.session_store import init_db
+from src.agent_core import build_graph
 from src.config import STATE_FILE
+from contextlib import asynccontextmanager
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 
@@ -79,10 +80,18 @@ def _error_json(
     return JSONResponse(status_code=status_code, content=body.model_dump())
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        yield
+    finally:
+        app.state.sqlite_conn.close()
+
 def create_app(
     backend: Optional[ChatBackend] = None,
     cors_origins: Optional[list[str]] = None,
     frontend_dist: Optional[Path] = FRONTEND_DIST,
+    state_file: Optional[Path] = None
 ) -> FastAPI:
     backend = backend or build_backend()
     origins = cors_origins
@@ -90,7 +99,7 @@ def create_app(
         raw = os.getenv("CORS_ORIGINS", DEFAULT_CORS_ORIGINS)
         origins = [o.strip() for o in raw.split(",") if o.strip()]
 
-    app = FastAPI(title="Chatbot GLPI — API", version="0.1.0")
+    app = FastAPI(title="Chatbot GLPI — API", version="0.1.0", lifespan=lifespan)
 
     # Origem restrita ao front; sem credenciais/cookies.
     app.add_middleware(
@@ -166,10 +175,19 @@ def create_app(
     if frontend_dist is not None and Path(frontend_dist).is_dir():
         app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
-    conn = sqlite3.connect(STATE_FILE, check_same_thread=False)
-    app.state.graph = build_graph(SqliteSaver(conn))
+    # EST-01: Inicialização da checkpoint database    
+    target_file = Path(state_file) if state_file is not None else STATE_FILE 
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    init_db(target_file)
+
+    conn = sqlite3.connect(target_file, check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
+    checkpointer.setup()
+    app.state.graph = build_graph(checkpointer)
+
+    app.state.checkpointer = checkpointer
+    app.state.sqlite_conn = conn
 
     return app
-
 
 app = create_app()
