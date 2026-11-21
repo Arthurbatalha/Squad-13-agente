@@ -1,4 +1,4 @@
-"""Persistência atômica do manifesto de sincronização (ING-04)."""
+"""Persistência atômica do manifesto de sincronização (ING-04 — Alternativa C)."""
 
 from copy import deepcopy
 import json
@@ -7,10 +7,14 @@ from pathlib import Path
 import tempfile
 from typing import Any
 
+VALID_SOURCE_TYPES = frozenset({"article", "case"})
+
 REQUIRED_MANIFEST_KEYS = frozenset({
     "active_generation",
-    "index_config",
+    "source_type",
+    "embedding_config",
     "preparation_version",
+    "source_signature",
     "sources",
     "last_checked_at",
     "last_published_at",
@@ -27,8 +31,10 @@ def empty_manifest() -> dict[str, Any]:
     """Retorna o estado inicial padrão antes da primeira sincronização."""
     return {
         "active_generation": None,
-        "index_config": None,
+        "source_type": None,
+        "embedding_config": None,
         "preparation_version": None,
+        "source_signature": None,
         "sources": {},
         "last_checked_at": None,
         "last_published_at": None,
@@ -45,18 +51,35 @@ def validate_manifest(data: Any) -> dict[str, Any]:
         raise ValueError(f"Chaves obrigatórias ausentes no manifesto: {sorted(missing)}.")
 
     active_gen = data["active_generation"]
-    if active_gen is not None and (type(active_gen) is not int or active_gen <= 0):
-        raise ValueError("active_generation deve ser inteiro positivo ou None.")
+    if active_gen is not None and (not isinstance(active_gen, str) or not active_gen.strip()):
+        raise ValueError("active_generation deve ser string não vazia ou None.")
 
-    if data["index_config"] is not None and not isinstance(data["index_config"], dict):
-        raise ValueError("index_config deve ser dict ou None.")
+    source_type = data["source_type"]
+    if source_type is not None and (
+        not isinstance(source_type, str) or source_type not in VALID_SOURCE_TYPES
+    ):
+        raise ValueError(
+            f"source_type deve ser um de {sorted(VALID_SOURCE_TYPES)} ou None."
+        )
 
-    if data["preparation_version"] is not None and not isinstance(data["preparation_version"], str):
-        raise ValueError("preparation_version deve ser string ou None.")
+    embedding_config = data["embedding_config"]
+    if embedding_config is not None and not isinstance(embedding_config, dict):
+        raise ValueError("embedding_config deve ser dict ou None.")
+
+    prep_version = data["preparation_version"]
+    if prep_version is not None and (not isinstance(prep_version, str) or not prep_version.strip()):
+        raise ValueError("preparation_version deve ser string não vazia ou None.")
+
+    source_signature = data["source_signature"]
+    if source_signature is not None and (
+        not isinstance(source_signature, str) or not source_signature.strip()
+    ):
+        raise ValueError("source_signature deve ser string não vazia ou None.")
 
     for ts_field in ("last_checked_at", "last_published_at"):
-        if data[ts_field] is not None and not isinstance(data[ts_field], str):
-            raise ValueError(f"{ts_field} deve ser string ISO-8601 ou None.")
+        ts_value = data[ts_field]
+        if ts_value is not None and (not isinstance(ts_value, str) or not ts_value.strip()):
+            raise ValueError(f"{ts_field} deve ser string ISO-8601 não vazia ou None.")
 
     raw_sources = data["sources"]
     if not isinstance(raw_sources, dict):
@@ -98,8 +121,10 @@ def validate_manifest(data: Any) -> dict[str, Any]:
 
     return {
         "active_generation": active_gen,
-        "index_config": deepcopy(data["index_config"]),
-        "preparation_version": data["preparation_version"],
+        "source_type": source_type,
+        "embedding_config": deepcopy(embedding_config),
+        "preparation_version": prep_version,
+        "source_signature": source_signature,
         "sources": normalized_sources,
         "last_checked_at": data["last_checked_at"],
         "last_published_at": data["last_published_at"],
