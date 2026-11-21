@@ -1,17 +1,12 @@
 """Testes da configuração, sem servidor GLPI ou chave de modelo."""
 
-from pathlib import Path
-import sys
 import pytest
-
-
+import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-
-
 from src.config import PROJECT_ROOT, load_settings
 
 
@@ -43,3 +38,16 @@ def test_invalid_timezone(monkeypatch):
     monkeypatch.setenv("APP_TIMEZONE", "Not/A_Real_Timezone")
     with pytest.raises(ValueError, match="APP_TIMEZONE inválido"):
         load_settings()
+
+
+
+def test_gemini_settings_are_configurable(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.1-flash-lite-custom")
+    monkeypatch.setenv("GEMINI_TIMEOUT_SECONDS", "12")
+    monkeypatch.setenv("RAG_MAX_PROMPT_TOKENS", "4096")
+    settings = load_settings()
+    assert settings.gemini_api_key == "test-key"
+    assert settings.gemini_model == "gemini-3.1-flash-lite-custom"
+    assert settings.gemini_timeout_seconds == 12
+    assert settings.rag_max_prompt_tokens == 4096

@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 STATE_FILE = PROJECT_ROOT / "data" / "agent_state.sqlite3"
-INDEX_DIR = PROJECT_ROOT / "data" / "index"
 
 
 @dataclass(frozen=True)
@@ -25,6 +24,10 @@ class AppSettings:
     glpi_password: str
     app_timezone: str
     timezone: ZoneInfo
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.1-flash-lite"
+    gemini_timeout_seconds: float = 30.0
+    rag_max_prompt_tokens: int = 8192
 
 
 def _read(name: str) -> str | None:
@@ -77,5 +80,8 @@ def load_settings(*, require_glpi: bool = False) -> AppSettings:
         glpi_password=_read("GLPI_PASSWORD") or "glpi",
         app_timezone=timezone_name,
         timezone=timezone,
+        gemini_api_key=_read("GEMINI_API_KEY"),
+        gemini_model=_read("GEMINI_MODEL") or "gemini-3.1-flash-lite",
+        gemini_timeout_seconds=float(_read("GEMINI_TIMEOUT_SECONDS") or "30"),
+        rag_max_prompt_tokens=int(_read("RAG_MAX_PROMPT_TOKENS") or "8192"),
     )
-

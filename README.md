@@ -225,3 +225,37 @@ Esse cenário utiliza uma URL inacessível apenas naquela execução.
 A coleta real, os testes automatizados com simulações e a falha
 controlada são evidências distintas. Não foi realizado ensaio Gemini
 nesta validação.
+
+
+## RAG-04 — geração Gemini com contexto limitado
+
+A geração fica isolada em `src/model/gemini_adapter.py`; a busca MiniLM continua
+independente e deve fornecer somente evidências autorizadas, já selecionadas,
+com `source_type`, `source_id`, `title`, `content`, `source_reference` e
+`chunk_id`. O adaptador não consulta GLPI nem executa recuperação.
+
+Configure no `.env` do backend:
+
+```dotenv
+GEMINI_API_KEY=sua-chave
+GEMINI_MODEL=gemini-3.1-flash-lite
+GEMINI_TIMEOUT_SECONDS=30
+RAG_MAX_PROMPT_TOKENS=8192
+```
+
+A chave não deve ser enviada ao React, incluída em prompts, logs ou checkpoints.
+O orçamento considera instruções, histórico, pergunta, metadados e evidências.
+A estimativa padrão é conservadora (bytes UTF-8 / 3), não substitui a medição
+oficial de tokens do provedor. Evidências são limitadas a quatro por padrão e
+seu conteúdo é reduzido até caber; se instruções/histórico/pergunta sozinhos
+ultrapassarem o orçamento, a geração falha explicitamente.
+
+Testes sem Gemini real:
+
+```bash
+python -m pytest -q tests/test_model_adapter.py
+```
+
+O teste automatizado usa modelo falso injetado. Ele não comprova chave válida,
+acesso, disponibilidade, cotas ou comportamento real do modelo. A demonstração
+real deve ser autorizada pelo squad e executada com a chave local configurada.
