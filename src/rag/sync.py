@@ -129,7 +129,7 @@ def is_source_eligible(item: dict[str, Any], source_type: str = "article") -> bo
     source_ref = item.get("source_reference")
     if not isinstance(title, str) or not title.strip():
         return False
-    if not isinstance(source_ref, str) or not source_ref.startswith("/Assistance/Ticket"):
+    if source_ref != "/Assistance/Ticket":
         return False
 
     body_fields = (item.get("content"), item.get("solution"), item.get("problem"))
