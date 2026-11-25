@@ -88,7 +88,7 @@ Variáveis da conversa real:
 ```dotenv
 CHAT_BACKEND=real
 CHAT_RESPONSE_MODE=auto
-CHAT_CHARACTER_SOURCE=glpi
+CHAT_CHARACTER_SOURCE=glpi`
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3.1-flash-lite
 GEMINI_TIMEOUT_SECONDS=30
