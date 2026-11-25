@@ -25,9 +25,29 @@ def build_default_article_sync_coordinator():
 
 def build_session_service():
     """Crie uma instância compartilhada no lifespan da aplicação FastAPI."""
-    from scripts.coletar_dados import create_client
+    import os
     from src.sessions import SessionService
 
+    settings = load_settings()
+    character_source = os.getenv("CHAT_CHARACTER_SOURCE", "glpi").strip().lower()
+    if character_source == "fixtures":
+        from src.glpi_integration.GLPI_Client import GLPICollection
+        # Apenas personagens sintéticos para ensaiar a conversa com o índice
+        # publicado quando o diretório do laboratório não estiver disponível.
+        users = [
+            {"id": 101, "username": "ana.ribeiro"},
+            {"id": 102, "username": "bruno.tavares"},
+            {"id": 103, "username": "carla.menezes"},
+        ]
+
+        def read_users():
+            return GLPICollection("fixture:/staff", [dict(user) for user in users],
+                                  total=len(users), pages=1)
+
+        return SessionService(read_users, integration_username="glpi")
+    if character_source != "glpi":
+        raise ValueError("CHAT_CHARACTER_SOURCE deve ser glpi ou fixtures.")
+    from scripts.coletar_dados import create_client
     settings = load_settings(require_glpi=True)
 
     def read_users():

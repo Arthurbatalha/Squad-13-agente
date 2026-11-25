@@ -257,6 +257,17 @@ FastAPI, agente LangChain com checkpoint SQLite, recuperação publicada da
 RAG-03, geração Gemini da RAG-04 e validação da RAG-05. O mock continua
 disponível com `CHAT_BACKEND=mock`.
 
+Para testar agora sem Gemini, use `CHAT_BACKEND=real` e
+`CHAT_RESPONSE_MODE=excerpts` (ou `auto` com `GEMINI_API_KEY` vazia). O chat
+mostra os trechos do índice publicado e suas fontes, após autorização da
+sessão. Esses trechos são dados recuperados, não uma resposta gerada por IA.
+`CHAT_RESPONSE_MODE=gemini` mantém o fluxo de geração e validação.
+Se o diretório GLPI do laboratório estiver inacessível, use
+`CHAT_CHARACTER_SOURCE=fixtures` para mostrar três técnicos sintéticos. O
+servidor ainda emite a sessão staff e aplica a autorização; a recuperação
+continua usando o índice publicado. O padrão `glpi` lê os IDs reais do
+laboratório.
+
 O cookie `rag01_session` é `HttpOnly`; o banco guarda apenas o hash do token.
 O `thread_id` sozinho não autoriza outra sessão. A troca de personagem cria
 um contexto novo, invalida o anterior e descarta o checkpoint antigo. O

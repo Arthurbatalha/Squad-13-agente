@@ -18,6 +18,21 @@ from src.sessions import (
 )
 
 
+def test_local_fixture_technicians_are_explicit_and_keep_staff_role(monkeypatch):
+    from src.main import build_session_service
+
+    monkeypatch.setenv("CHAT_CHARACTER_SOURCE", "fixtures")
+    directory = build_session_service()
+    assert directory.staff_options() == {
+        101: "ana.ribeiro", 102: "bruno.tavares", 103: "carla.menezes"
+    }
+    token, view = directory.start(staff_user_id=101)
+    assert view["role"] == "staff"
+    assert directory.model_context(token, view["thread_id"])["staff_user_id"] == 101
+    with pytest.raises(InvalidCharacter):
+        directory.start(staff_user_id=999)
+
+
 def users():
     # IDs arbitrários: a sessão tem que resolvê-los na instância consultada.
     rows = [

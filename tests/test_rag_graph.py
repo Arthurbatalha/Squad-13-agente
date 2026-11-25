@@ -446,6 +446,56 @@ def test_chat_backend_environment_selects_real_and_preserves_mock(
         build_backend(object(), tmp_path / "state.sqlite3")
 
 
+def test_excerpts_mode_returns_published_sources_without_gemini(tmp_path):
+    harness = make_harness(tmp_path)
+    try:
+        harness.backend.response_mode = "excerpts"
+        info, token = harness.start(42)
+        assert info.response_mode == "excerpts"
+        before = harness.encoder.stats
+
+        first = _answer(harness, info.thread_id, token)
+        second = _answer(harness, info.thread_id, token, "VPN no macOS")
+
+        assert first.answer_status == second.answer_status == "answered"
+        assert first.sources[0].source_id == "12"
+        assert "VPN" in first.sources[0].excerpt
+        assert second.sources[0].source_id == "20"
+        assert harness.adapter.calls == []
+        assert harness.encoder.stats["document_texts"] == before["document_texts"]
+        assert harness.encoder.stats["question_texts"] == before["question_texts"] + 2
+        assert len(harness.graph.history(info.thread_id)) == 4
+    finally:
+        harness.close()
+
+
+def test_excerpts_mode_preserves_clarification_and_no_evidence(tmp_path):
+    harness = make_harness(tmp_path)
+    try:
+        harness.backend.response_mode = "excerpts"
+        info, token = harness.start(42)
+        clarification = _answer(harness, info.thread_id, token, "Como configuro a VPN?")
+        assert isinstance(clarification, ClarificationReply)
+        answer = _answer(harness, info.thread_id, token, "Windows")
+        assert answer.answer_status == "answered"
+        assert answer.sources[0].source_id == "12"
+        missing = _answer(harness, info.thread_id, token, "Qual é o preço do café?")
+        assert missing.answer_status == "no_evidence"
+        assert harness.adapter.calls == []
+    finally:
+        harness.close()
+
+
+def test_auto_response_mode_uses_excerpts_without_gemini_key(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHAT_BACKEND", "real")
+    monkeypatch.setenv("CHAT_RESPONSE_MODE", "auto")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    backend = build_backend(object(), tmp_path / "state.sqlite3")
+    assert backend.response_mode == "excerpts"
+    monkeypatch.setenv("GEMINI_API_KEY", "fixture-key")
+    assert build_backend(object(), tmp_path / "state.sqlite3").response_mode == "gemini"
+
+
 def test_write_decisions_are_explicitly_disabled(tmp_path):
     harness = make_harness(tmp_path)
     try:

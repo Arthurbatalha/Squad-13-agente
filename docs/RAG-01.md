@@ -87,6 +87,8 @@ Variáveis da conversa real:
 
 ```dotenv
 CHAT_BACKEND=real
+CHAT_RESPONSE_MODE=auto
+CHAT_CHARACTER_SOURCE=glpi
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3.1-flash-lite
 GEMINI_TIMEOUT_SECONDS=30
@@ -105,6 +107,28 @@ prompt ou ao checkpoint.
 
 `CHAT_BACKEND=mock` mantém a demonstração antiga, sem Gemini, MiniLM ou GLPI.
 `CHAT_BACKEND` inválido interrompe a inicialização com erro explícito.
+
+### Demonstração sem Gemini
+
+`CHAT_RESPONSE_MODE=auto` usa `excerpts` quando `GEMINI_API_KEY` está vazia e
+`gemini` quando ela está configurada. Também é possível definir `excerpts` ou
+`gemini` explicitamente. No modo `excerpts`, a sessão e a autorização são as
+mesmas do backend real. A pergunta consulta o índice publicado com MiniLM; o
+chat mostra os trechos selecionados, IDs e referências. Esclarecimento,
+ausência de evidência e índice indisponível seguem a política existente.
+Nenhuma chamada de geração é feita. O texto é rotulado como consulta de
+artigos, não como resposta sintetizada. O checkpoint conserva os turnos.
+
+Para reproduzir sem GLPI, execute `CHAT_BACKEND=real CHAT_RESPONSE_MODE=excerpts
+CHAT_CHARACTER_SOURCE=fixtures python -m uvicorn src.api.app:app --port 8000` e `npm run dev` em
+`../Squad-13-Frontend`. Abra `http://localhost:5173`, escolha um técnico e
+digite uma pergunta relacionada aos artigos da geração ativa. Se a lista de
+técnicos falhar, confira a API e a configuração de leitura do laboratório GLPI.
+Para demonstrar sem o diretório GLPI, configure
+`CHAT_CHARACTER_SOURCE=fixtures`: Ana (101), Bruno (102) e Carla (103) são
+personagens sintéticos. O índice e o MiniLM continuam reais; a identidade é
+uma fixture do servidor, identificada como tal. Não habilite esse modo para
+uma implantação que precise validar usuários reais do GLPI.
 
 ### Limites configuráveis
 

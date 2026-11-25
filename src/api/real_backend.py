@@ -14,6 +14,7 @@ from __future__ import annotations
 from hashlib import sha256
 import hmac
 import logging
+import os
 from pathlib import Path
 from threading import RLock
 from typing import Any, Callable
@@ -23,7 +24,9 @@ from src.api.schemas import (
     ChatReply,
     DecisionRequest,
     SessionInfo,
+    Source,
     StaffCharacter,
+    TextReply,
 )
 from src.authorization.policies import AccessDenied, Principal
 from src.authorization.service import AuthorizationService
@@ -42,8 +45,13 @@ from src.rag.embeddings import (
     IncompatibleConfig,
 )
 from src.rag.evidence_policy import (
+    INCOMPLETE_NOTE,
     KIND_ANSWERED,
     KIND_CLARIFICATION,
+    PolicyOutcome,
+    detect_ambiguity,
+    effective_question,
+    outcome_without_answer,
     respond,
 )
 from src.rag.local_index import IndexCorrupt
@@ -151,7 +159,13 @@ class RealChatBackend:
         authorization: AuthorizationService | None = None,
         retriever=None,
         retrieval_config: RetrievalConfig | None = None,
+        response_mode: str = "gemini",
     ):
+        if response_mode == "auto":
+            response_mode = "gemini" if os.getenv("GEMINI_API_KEY", "").strip() else "excerpts"
+        if response_mode not in {"gemini", "excerpts"}:
+            raise ValueError("CHAT_RESPONSE_MODE deve ser auto, gemini ou excerpts.")
+        self.response_mode = response_mode
         self.graph = graph
         self.state_file = Path(state_file)
         self.session_service = session_service
@@ -272,6 +286,7 @@ class RealChatBackend:
                 name=record["character_name"] or f"Técnico {record['character_id']}",
             ),
             adapter=self.adapter,
+            response_mode=self.response_mode,
             pending_action=None,
             last_write_result=None,
         )
@@ -335,6 +350,7 @@ class RealChatBackend:
             role="staff",
             character=character,
             adapter=self.adapter,
+            response_mode=self.response_mode,
         )
         return info, token
 
@@ -391,6 +407,7 @@ class RealChatBackend:
                 role="staff",
                 character=character,
                 adapter=self.adapter,
+                response_mode=self.response_mode,
             )
             return info, new_token
 
@@ -444,13 +461,49 @@ class RealChatBackend:
                 generation["assistant_message_id"] = result.assistant_message_id
                 return result.result
 
-            try:
-                outcome = respond(
-                    text,
-                    history=history,
-                    retrieve=retrieve,
-                    generate=generate,
+            def retrieve_excerpts():
+                """Entrega apenas os trechos publicados; não sintetiza resposta factual."""
+                ambiguity = detect_ambiguity(text, history)
+                if ambiguity is not None:
+                    return ambiguity
+                question = effective_question(text, history)
+                try:
+                    result = retrieve(question)
+                except PermissionError:
+                    result = {"status": "no_evidence", "reason": "empty_authorized_scope", "chunks": []}
+                early = outcome_without_answer(question, result)
+                if early is not None:
+                    return early
+                sources = [
+                    Source(
+                        source_type=chunk["source_type"],
+                        source_id=str(chunk["source_id"]),
+                        title=chunk["title"],
+                        reference=chunk["source_reference"],
+                        chunk_id=chunk["chunk_id"],
+                        excerpt=chunk["content"],
+                    )
+                    for chunk in result["chunks"]
+                ]
+                message = (
+                    "Encontrei estes trechos na base de conhecimento. "
+                    "Confira as fontes abaixo; esta consulta ainda não gera uma resposta com IA."
                 )
+                if result.get("incomplete"):
+                    message += INCOMPLETE_NOTE
+                reply = TextReply(text=message, sources=sources, answer_status="answered")
+                return PolicyOutcome(KIND_ANSWERED, reply, "published_excerpts", question)
+
+            try:
+                if self.response_mode == "excerpts":
+                    outcome = retrieve_excerpts()
+                else:
+                    outcome = respond(
+                        text,
+                        history=history,
+                        retrieve=retrieve,
+                        generate=generate,
+                    )
             except (ModelAdapterError, PromptBudgetExceeded) as exc:
                 logger.warning("Falha de geração (%s).", type(exc).__name__)
                 raise _model_error(exc) from None
@@ -465,24 +518,19 @@ class RealChatBackend:
                     assistant_metadata={"clarification": True},
                 )
             elif outcome.kind == KIND_ANSWERED:
-                if "assistant_message_id" not in generation:
-                    raise ChatBackendError(
-                        "internal_error",
-                        "A resposta aprovada não foi persistida.",
-                        status_code=500,
+                metadata = {
+                    "policy": outcome.kind,
+                    "sources": [source.model_dump() for source in outcome.reply.sources],
+                }
+                if "assistant_message_id" in generation:
+                    self.graph.replace_assistant(
+                        thread_id, generation["assistant_message_id"],
+                        outcome.reply.text, metadata=metadata,
                     )
-                # O checkpoint guarda exatamente o texto e as fontes exibidas.
-                self.graph.replace_assistant(
-                    thread_id,
-                    generation["assistant_message_id"],
-                    outcome.reply.text,
-                    metadata={
-                        "policy": outcome.kind,
-                        "sources": [
-                            source.model_dump() for source in outcome.reply.sources
-                        ],
-                    },
-                )
+                else:
+                    self.graph.append_turn(
+                        thread_id, text, outcome.reply.text, assistant_metadata=metadata,
+                    )
             else:
                 if "assistant_message_id" in generation:
                     self.graph.replace_assistant(

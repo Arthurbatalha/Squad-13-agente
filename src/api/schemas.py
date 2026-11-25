@@ -108,6 +108,7 @@ class SessionInfo(StrictModel):
     role: Literal["staff"] = "staff"
     character: StaffCharacter
     adapter: Literal["mock", "real"]
+    response_mode: Optional[Literal["excerpts", "gemini"]] = None
     pending_action: Optional[PendingAction] = None
     # UI-02: reconciliação após perda de resposta; não é histórico nem checkpoint.
     last_write_result: Optional[WriteResultReply] = None

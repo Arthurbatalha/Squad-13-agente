@@ -79,6 +79,7 @@ def build_backend(
         return RealChatBackend(
             graph=graph,
             state_file=state_file if state_file is not None else STATE_FILE,
+            response_mode=os.getenv("CHAT_RESPONSE_MODE", "auto").strip().lower(),
         )
     raise RuntimeError(
         f"CHAT_BACKEND={kind!r} inválido. Valores suportados: 'mock' e 'real'."
