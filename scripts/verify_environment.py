@@ -19,7 +19,9 @@ IMPORTS = {
     "sentence-transformers": "sentence_transformers",
     "tzdata": "tzdata",
     "html2text": "html2text",
-    "chromadb": "chromadb",
+    "numpy": "numpy",
+    "huggingface-hub": "huggingface_hub",
+    "psutil": "psutil",
     "langchain": "langchain",
     "langgraph": "langgraph",
     "langchain-google-genai": "langchain_google_genai",
@@ -31,8 +33,9 @@ IMPORTS = {
 
 def main() -> int:
     print(f"Python: {sys.version.split()[0]} | {sys.executable}")
-    if sys.version_info < (3, 11):
-        print("ERRO: a versão do Python deve ser 3.11 ou mais recente.")
+    required_python = (ROOT / ".python-version").read_text().strip()
+    if f"{sys.version_info.major}.{sys.version_info.minor}" != required_python:
+        print(f"ERRO: use Python {required_python} no ambiente virtual do projeto.")
         return 1
 
     problems = 0
