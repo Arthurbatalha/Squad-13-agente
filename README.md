@@ -265,9 +265,9 @@ histórico fica no SQLite e é retomado após reiniciar o backend.
 Configuração e exemplos sem segredos estão em
 [.env.example](.env.example) e [docs/RAG-01.md](docs/RAG-01.md). O frontend
 da conversa fica no repositório separado
-[Squad-13-frontend](https://github.com/Anthonnyjda-dev/Squad-13-frontend).
+[lumora-frontend](https://github.com/isaaarx/lumora-frontend).
 Nos exemplos abaixo, ele é clonado como repositório irmão em
-`../Squad-13-frontend`.
+`../Squad-13-Frontend`.
 
 Para executar o backend:
 
@@ -279,7 +279,7 @@ CHAT_BACKEND=real uvicorn src.api.app:app --reload --port 8000
 Em outro terminal, no repositório do frontend:
 
 ```bash
-cd ../Squad-13-frontend
+cd ../Squad-13-Frontend
 npm ci
 npm run dev
 ```

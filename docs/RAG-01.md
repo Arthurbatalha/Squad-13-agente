@@ -23,7 +23,7 @@ escrita do GLPI continuam desabilitadas.
 ## 2. Arquitetura e ponto de entrada
 
 ```
-React (repositório Squad-13-frontend)
+React (repositório lumora-frontend)
   └── fetch /api, credentials: include
         └── FastAPI (src/api/app.py)
               ├── cookie rag01_session → hash SHA-256 em ui_sessions
@@ -40,8 +40,7 @@ React (repositório Squad-13-frontend)
 ```
 
 O frontend está em
-https://github.com/Anthonnyjda-dev/Squad-13-frontend e não é servido pelo
-backend por padrão.
+[isaaarx/lumora-frontend](https://github.com/isaaarx/lumora-frontend). O Vite encaminha as requisições ao FastAPI.
 
 O ponto de entrada é `src/api/app.py:create_app()`. Ele:
 
@@ -70,8 +69,8 @@ um provedor determinístico e um índice temporário.
 | `src/api/backend.py` | Protocolo do backend, preservando o mock. |
 | `src/api/mock_backend.py` | Backend de demonstração, agora com `session_token` opcional. |
 | `src/config.py` | Limites de histórico, iterações, tentativas e timeout. |
-| [Squad-13-frontend/src/api.js](https://github.com/Anthonnyjda-dev/Squad-13-frontend/blob/main/src/api.js) | `credentials: "include"` e nenhum segredo no navegador. |
-| [Squad-13-frontend/src/useConversation.js](https://github.com/Anthonnyjda-dev/Squad-13-frontend/blob/main/src/useConversation.js) | Mensagens de erro sanitizadas e descarte de respostas atrasadas. |
+| [lumora-frontend/src/api.js](https://github.com/isaaarx/lumora-frontend/blob/main/src/api.js) | `credentials: "include"` e nenhum segredo no navegador. |
+| [lumora-frontend/src/useConversation.js](https://github.com/isaaarx/lumora-frontend/blob/main/src/useConversation.js) | Mensagens de erro sanitizadas e descarte de respostas atrasadas. |
 | `tests/rag01_fixtures.py` | Índice real temporário, SQLite real e provedor fake. |
 | `tests/test_rag_graph.py` | Cenários de grafo, política, sessão e segurança. |
 | `tests/integration/test_graph_resume.py` | HTTP real com cookie e retomada após reinício. |
@@ -219,13 +218,13 @@ CHAT_BACKEND=real uvicorn src.api.app:app --reload --port 8000
 ```
 
 O frontend fica no repositório separado
-[Squad-13-frontend](https://github.com/Anthonnyjda-dev/Squad-13-frontend).
+[lumora-frontend](https://github.com/isaaarx/lumora-frontend).
 Nos exemplos abaixo, ele é clonado como repositório irmão em
-`../Squad-13-frontend`. Em desenvolvimento, o proxy `/api` encaminha para a
+`../Squad-13-Frontend`. Em desenvolvimento, o proxy `/api` encaminha para a
 porta 8000:
 
 ```bash
-cd ../Squad-13-frontend
+cd ../Squad-13-Frontend
 npm ci
 npm run dev
 ```
@@ -257,12 +256,17 @@ python -m pytest -q test tests
 python -m pip check
 # No broken requirements found.
 
-cd ../Squad-13-frontend && npm test
-# 2 arquivos, 36 testes passed
-
-cd ../Squad-13-frontend && npm run build
-# vite 6.4.6: 31 módulos, build concluído
+cd ../Squad-13-Frontend
+npm test
+npm run lint
+npm run build
 ```
+
+No Lumora, a seleção de técnico, o envio de mensagens, as opções de esclarecimento e as fontes usam as rotas desta API. A lista de chamados e seus detalhes exibem dados de demonstração. O histórico visível da aba pode ser consultado em modo de leitura para o mesmo técnico. O servidor mantém o contexto da sessão após recarregar a página, mas o GET da sessão não devolve a transcrição.
+
+A suíte do backend foi reexecutada em uma cópia temporária: 573 testes passaram em 19,68 s. No frontend, as duas verificações do cliente HTTP passaram e o Vite 8.3.6 gerou o build. O lint registrou um aviso preexistente em `Table.jsx`.
+
+Na validação da integração com o Lumora, o Brave headless, em viewport desktop e na largura de 390 px, acessou o Vite e o FastAPI por HTTP. Com `RealChatBackend`, SQLite, índice temporário publicado e provedores determinísticos, a pergunta de VPN produziu esclarecimento e a escolha Windows exibiu o artigo 12. Recarregar recuperou a sessão pelo cookie e trocar de técnico abriu uma nova conversa. O ensaio usou fixtures para o diretório, o encoder e a geração. As medições de laboratório abaixo pertencem à validação anterior do backend.
 
 Os testes RAG-01 usam SQLite real em diretório temporário, `SqliteSaver`,
 índice publicado temporário e um adaptador determinístico injetado. Cobrem:
@@ -393,7 +397,7 @@ caminho HTTP já foram validados.
   `ModelNotConfigured`;
 - `data/index` publicado com 40 artigos e 82 trechos;
 - laboratório GLPI respondendo com 300 chamados e 40 artigos;
-- não há navegador instalado, então a validação visual não foi feita.
+- o ensaio original do laboratório foi feito por HTTP. O ensaio do Lumora em navegador está na seção 9.
 
 Portanto, os resultados acima comprovam o caminho HTTP, a política, o índice
 publicado, o SQLite e a retomada com MiniLM real e GLPI real. **Eles não
