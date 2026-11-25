@@ -1,5 +1,8 @@
 # Setup de Infraestrutura e Dependências (Sprint 1)
 
+> Registro histórico da Sprint 1. Para instalar o projeto com Python 3.14 e a
+> stack vigente da Alternativa C, siga o [README](../README.md#ambiente-python-do-projeto).
+
 ## Introdução
 Este documento estabelece o guia oficial para a configuração do ambiente de desenvolvimento e a instalação das dependências do sistema RAG integrado ao ecossistema do GLPI (Squad 13). O objetivo é garantir que todo o time possua a mesma base técnica para o desenvolvimento da busca híbrida e a geração de embeddings customizados, respeitando a restrição do projeto de **não utilizar** frameworks de abstração de alto nível (como LangChain ou LlamaIndex).
 

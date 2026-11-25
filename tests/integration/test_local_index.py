@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import Mock
 import numpy as np
 import pytest
 
@@ -16,6 +17,7 @@ if str(ROOT) not in sys.path:
 from src.rag.chunk_contract import PREPARATION_VERSION
 from src.rag.corpus import CorpusMetadata, CorpusUnavailable, PreparedCorpus
 from src.rag.embeddings import DEFAULT_CONFIG, IncompatibleConfig
+from src.rag import local_index
 from src.rag.local_index import IndexCorrupt, LocalIndexStore
 from test.embedding_fakes import chunk, unit
 
@@ -140,16 +142,18 @@ def test_rejects_wrong_preparation_version_and_source_type(store):
         store.create_candidate(stale)
 
 
-def test_detects_tampered_or_missing_files_and_never_activates_them(store):
+@pytest.mark.parametrize("old,new", [(b"A zero", b"A ZERO"), (b"\n", b"\r\n")],
+                         ids=["content", "crlf"])
+def test_detects_tampered_or_missing_files_and_never_activates_them(store, old, new):
     info = store.create_candidate(corpus_v1())
     directory = store.directory / f"gen-{info.generation_id}"
     catalog = directory / "catalog.json"
-    good = catalog.read_text(encoding="utf-8")
-    catalog.write_text(good.replace("A zero", "A ZERO"), encoding="utf-8")
+    good = catalog.read_bytes()
+    catalog.write_bytes(good.replace(old, new))
     with pytest.raises(IndexCorrupt):
         store.activate(info.generation_id)
     assert store.active_generation_id() is None
-    catalog.write_text(good, encoding="utf-8")
+    catalog.write_bytes(good)
     store.activate(info.generation_id)
     np.save(directory / "vectors.npy", np.stack([unit(0), unit(1), unit(2)])[::-1].copy())
     with pytest.raises(IndexCorrupt):
@@ -215,6 +219,48 @@ def test_failed_write_leaves_active_untouched_and_no_partial_generation(store, m
     assert not list(store.directory.glob(".tmp-*"))
     with store.open_active() as current:
         assert current.generation_id == active.generation_id
+
+
+@pytest.mark.parametrize("winerror", [5, 32, 33])
+def test_temporary_windows_lock_retries_only_the_candidate_rename(store, monkeypatch, winerror):
+    active = publish(store, corpus_v1())
+    rename = local_index.os.rename
+    lock = PermissionError("Bloqueio temporário simulado")
+    lock.winerror = winerror
+    attempts = []
+
+    def locked_once(src, dst):
+        attempts.append((src, dst))
+        assert store.active_generation_id() == active.generation_id
+        if len(attempts) == 1:
+            raise lock
+        return rename(src, dst)
+
+    monkeypatch.setattr(local_index.os, "rename", locked_once)
+    candidate = store.create_candidate(corpus_v1())
+    assert len(attempts) == 2 and attempts[0] == attempts[1]
+    assert store.active_generation_id() == active.generation_id
+    store.activate(candidate.generation_id)
+    with store.open_active() as reader:
+        assert reader.generation_id == candidate.generation_id
+
+
+@pytest.mark.parametrize("winerror,expected_attempts", [(5, 6), (None, 1)])
+def test_permanent_rename_error_preserves_the_active_generation(store, monkeypatch, winerror, expected_attempts):
+    active = publish(store, corpus_v1())
+    denied = PermissionError("Acesso negado simulado")
+    if winerror is not None:
+        denied.winerror = winerror
+    rename = Mock(side_effect=denied)
+    monkeypatch.setattr(local_index.os, "rename", rename)
+    monkeypatch.setattr(local_index.time, "sleep", lambda _: None)
+    with pytest.raises(PermissionError) as caught:
+        store.create_candidate(corpus_v1())
+    assert caught.value is denied and rename.call_count == expected_attempts
+    assert not list(store.directory.glob(".tmp-*"))
+    assert store._generation_ids() == [active.generation_id]
+    with store.open_active() as reader:
+        assert reader.generation_id == active.generation_id
 
 
 def test_article_and_case_indexes_are_independent(tmp_path):

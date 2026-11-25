@@ -12,6 +12,7 @@ from typing import get_args
 import pytest
 
 from src.api.schemas import ClarificationReply, Source, TextReply
+from src.model.gemini_adapter import GeminiAdapter, GenerationResult
 from src.rag.chunk_contract import PREPARATION_VERSION
 from src.rag.evidence_policy import (
     AMBIGUITY_RULES,
@@ -71,6 +72,17 @@ class Spy:
         return self.result
 
 
+class GenerationSpy(Spy):
+    def __call__(self, question, chunks):
+        text = super().__call__(question, chunks)
+        return GenerationResult(text, "fixture", 0, prompt_evidence=tuple(chunks))
+
+
+def finalize_fixture(question, retrieved, answer):
+    # Esta fixture envia todos os trechos integralmente.
+    return finalize_answer(question, retrieved, answer, prompt_evidence=retrieved["chunks"])
+
+
 # --- ambiguidade: VPN, senha, impressora -------------------------------------
 # Tabela de AVALIAÇÃO da regra (perguntas de referência 1–7, 14–15 e paráfrases);
 # não são respostas pré-definidas: a regra é por tema + intenção + dado ausente.
@@ -94,6 +106,7 @@ def test_ambiguous_procedure_questions_ask_for_the_missing_detail(question, rule
 @pytest.mark.parametrize("question", [
     "Como configuro a VPN corporativa no Windows?",           # 1: já traz o sistema
     "Configuro a VPN no meu MacBook?",
+    "Como configuro a VPN no Windows? Não sei se preciso do certificado.",
     "Qual o tamanho mínimo da senha de rede?",                # 2: sem verbo de procedimento
     "Como instalo a impressora do meu andar?",                # 3: "andar" = de rede
     "Como adiciono a impressora USB da recepção?",
@@ -221,13 +234,13 @@ def test_evidence_means_generate_and_inconsistent_retrieval_fails_loudly():
     with pytest.raises(TypeError):
         outcome_without_answer("q", ["não é dicionário"])
     with pytest.raises(ValueError):
-        finalize_answer("q", retrieval("no_evidence", "insufficient_evidence"), "texto")
+        finalize_fixture("q", retrieval("no_evidence", "insufficient_evidence"), "texto")
 
 
 # --- resposta gerada: aprovada x reprovada ------------------------------------
 def test_validated_answer_is_shown_with_sources_from_the_retrieved_catalog():
     answer = f"Abra Configurações e clique em Adicionar VPN (passo 2) [{CID}]."
-    outcome = finalize_answer("Como configuro a VPN no Windows?", retrieval(), answer)
+    outcome = finalize_fixture("Como configuro a VPN no Windows?", retrieval(), answer)
     assert outcome.kind == KIND_ANSWERED and outcome.reason == "validated"
     reply = outcome.reply
     assert reply.answer_status == "answered" and reply.text == answer
@@ -238,7 +251,7 @@ def test_validated_answer_is_shown_with_sources_from_the_retrieved_catalog():
 
 def test_partial_retrieval_is_disclosed_after_validation():
     answer = f"Clique em Adicionar VPN [{CID}]."
-    outcome = finalize_answer("q", retrieval(incomplete=True), answer)
+    outcome = finalize_fixture("q", retrieval(incomplete=True), answer)
     assert outcome.kind == KIND_ANSWERED
     assert outcome.reply.text == answer + INCOMPLETE_NOTE
 
@@ -251,7 +264,7 @@ def test_partial_retrieval_is_disclosed_after_validation():
     ("Reinicie o computador e tente de novo.", "no_citation"),               # sem fonte
 ])
 def test_rejected_answer_is_never_displayed_and_leaks_nothing(answer, verdict):
-    outcome = finalize_answer("Como configuro a VPN no Windows?", retrieval(), answer)
+    outcome = finalize_fixture("Como configuro a VPN no Windows?", retrieval(), answer)
     assert outcome.kind == KIND_REJECTED and outcome.reason == f"validator:{verdict}"
     blob = outcome.reply.model_dump_json()
     assert outcome.reply.text == MESSAGES[KIND_REJECTED]
@@ -262,19 +275,19 @@ def test_rejected_answer_is_never_displayed_and_leaks_nothing(answer, verdict):
 
 def test_model_refusal_becomes_the_fixed_no_evidence_text():
     refusal = "Não há informação suficiente nas fontes para responder a essa pergunta."
-    outcome = finalize_answer("Qual a política de home office?", retrieval(), refusal)
+    outcome = finalize_fixture("Qual a política de home office?", retrieval(), refusal)
     assert outcome.kind == KIND_NO_EVIDENCE and outcome.reason == "model_declined"
     assert outcome.reply.text == MESSAGES[KIND_NO_EVIDENCE] and outcome.reply.sources == []
 
 
 def test_refusal_may_repeat_a_term_from_the_question():
-    outcome = finalize_answer("O que significa o erro VPN-FIX-777?", retrieval(),
+    outcome = finalize_fixture("O que significa o erro VPN-FIX-777?", retrieval(),
                               "Não encontrei o erro VPN-FIX-777 nas fontes.")
     assert outcome.kind == KIND_NO_EVIDENCE
 
 
 def test_refusal_that_smuggles_an_invented_source_is_rejected_not_softened():
-    outcome = finalize_answer("q", retrieval(),
+    outcome = finalize_fixture("q", retrieval(),
                               f"Não encontrei, mas veja {PREPARATION_VERSION}:article:999:0000.")
     assert outcome.kind == KIND_REJECTED
     assert "999" not in outcome.reply.model_dump_json()
@@ -292,7 +305,7 @@ def test_full_flow_clarify_then_answer_uses_the_combined_question():
     first = respond("Como configuro a VPN?", retrieve=Spy(), generate=Spy())
     history = [("user", "Como configuro a VPN?"), ("assistant", first.reply.question)]
     retrieve = Spy(retrieval())
-    generate = Spy(f"Clique em Adicionar VPN [{CID}].")
+    generate = GenerationSpy(f"Clique em Adicionar VPN [{CID}].")
     outcome = respond("Windows", retrieve=retrieve, generate=generate, history=history)
     assert outcome.kind == KIND_ANSWERED
     assert retrieve.calls == [("Como configuro a VPN? Windows",)]
@@ -302,7 +315,7 @@ def test_full_flow_clarify_then_answer_uses_the_combined_question():
 
 def test_generator_receives_exactly_the_chunks_the_validator_checks():
     result = retrieval()
-    generate = Spy(f"Clique em Adicionar VPN [{CID}].")
+    generate = GenerationSpy(f"Clique em Adicionar VPN [{CID}].")
     respond("Como uso o cliente VPN do Windows?", retrieve=Spy(result), generate=generate)
     assert generate.calls[0][1] is result["chunks"]
 
@@ -337,7 +350,7 @@ def test_provider_failure_propagates_instead_of_becoming_an_answer():
 
 def test_invalid_generation_in_the_full_flow_is_rejected():
     outcome = respond("Como uso o cliente VPN do Windows?", retrieve=Spy(retrieval()),
-                      generate=Spy("Veja o artigo 999."))
+                      generate=GenerationSpy("Veja o artigo 999."))
     assert outcome.kind == KIND_REJECTED
 
 
@@ -352,11 +365,11 @@ HOSTILE = (
 def test_instruction_inside_an_article_cannot_make_the_model_text_pass():
     evidence = [chunk(content=HOSTILE)]
     # O modelo "obedeceu" o artigo: cita o ID que o artigo mandou.
-    obeyed = finalize_answer("Como uso a VPN do Windows?", retrieval(chunks=evidence),
+    obeyed = finalize_fixture("Como uso a VPN do Windows?", retrieval(chunks=evidence),
                              "Veja ing-01-v2:article:999:0000.")
     assert obeyed.kind == KIND_REJECTED and "999" not in obeyed.reply.model_dump_json()
     # O modelo "obedeceu" o artigo: respondeu sem citar.
-    uncited = finalize_answer("Como uso a VPN do Windows?", retrieval(chunks=evidence),
+    uncited = finalize_fixture("Como uso a VPN do Windows?", retrieval(chunks=evidence),
                               "Abra a VPN e conecte.")
     assert uncited.kind == KIND_REJECTED
 
@@ -386,8 +399,8 @@ def test_every_reply_is_json_serialisable_and_log_has_codes_only():
         outcome_without_answer(question, retrieval("no_evidence", "insufficient_evidence")),
         outcome_without_answer(question, retrieval("no_evidence", "empty_authorized_scope")),
         outcome_without_answer(question, retrieval("index_unavailable", "index_unavailable")),
-        finalize_answer(question, retrieval(), "Veja o artigo 77."),
-        finalize_answer(question, retrieval(), answer),
+        finalize_fixture(question, retrieval(), "Veja o artigo 77."),
+        finalize_fixture(question, retrieval(), answer),
     ]
     assert [o.kind for o in outcomes] == [
         KIND_CLARIFICATION, KIND_NO_EVIDENCE, KIND_ACCESS_DENIED,
@@ -401,3 +414,75 @@ def test_every_reply_is_json_serialisable_and_log_has_codes_only():
         assert "SEGREDO" not in str(log) and "Clique" not in str(log)
     assert outcomes[-1].to_log()["sources_shown"] == 1
     assert outcomes[4].to_log()["invalid_citations"] == 1
+
+
+@pytest.mark.parametrize("question, reply", [
+    ("Como usar a VPN: Windows ou macOS?", "macOS"),
+    ("Como mudar a senha? Não sei se tenho acesso ao e-mail.", "Perdi o acesso"),
+    ("Como instalo a impressora: de rede ou USB?", "USB"),
+])
+def test_alternatives_are_not_a_choice_and_iterable_history_preserves_the_question(question, reply):
+    first = respond(question, retrieve=Spy(), generate=Spy())
+    assert first.kind == KIND_CLARIFICATION
+    history = iter([("user", question), ("assistant", first.reply.question)])
+    retrieve = Spy(retrieval())
+    final = respond(reply, history=history, retrieve=retrieve, generate=GenerationSpy(f"Veja [{CID}]."))
+    assert final.kind == KIND_ANSWERED
+    assert retrieve.calls == [(f"{question} {reply}",)]
+
+
+def test_only_the_visible_part_of_the_authorized_catalog_can_support_an_answer():
+    class FixtureModel:
+        def invoke(self, messages):
+            assert "VPN-CODE-999" not in str(messages)
+            assert chunk(2)["chunk_id"] not in str(messages)
+            return f"Use VPN-CODE-999 [{CID}] e consulte o artigo 2."
+
+    context = retrieval(chunks=[chunk(content="Procedimento. " * 700 + "VPN-CODE-999"), chunk(2)])
+    adapter = GeminiAdapter(FixtureModel(), max_evidence=1, max_prompt_tokens=500)
+    outcome = respond("Cliente do Windows", retrieve=Spy(context), generate=adapter.generate)
+    assert outcome.kind == KIND_REJECTED
+    assert [c.token for c in outcome.validation.invalid_citations] == ["artigo 2"]
+    assert outcome.validation.unsupported_specifics == ("VPN-CODE-999",)
+    assert outcome.reply.sources == []
+
+
+def test_generated_text_without_the_prompt_snapshot_fails_closed():
+    answer = f"Veja [{CID}]."
+    outcome = respond("Pergunta", retrieve=Spy(retrieval()), generate=Spy(answer))
+    assert outcome.kind == KIND_REJECTED and outcome.reason == "missing_prompt_evidence"
+    assert CID not in outcome.reply.model_dump_json()
+
+
+@pytest.mark.parametrize("changes", [
+    {"title": "Título de outra fonte"}, {"source_reference": "Referência inventada"},
+    {"content": "Texto de outra fonte"}, {"chunk_id": "ing-01-v2:article:77:0000"},
+])
+def test_prompt_snapshot_cannot_expand_the_retrieved_catalog(changes):
+    context = retrieval()
+    shown = [{**context["chunks"][0], **changes}]
+    outcome = finalize_answer("Pergunta", context, f"Veja [{CID}].", prompt_evidence=shown)
+    assert outcome.kind == KIND_REJECTED and outcome.reason == "invalid_prompt_evidence"
+    assert outcome.reply.sources == []
+
+
+def test_positive_statement_about_evidence_does_not_count_as_a_refusal():
+    outcome = finalize_fixture("Pergunta", retrieval(), "Tenho informação suficiente para responder.")
+    assert outcome.kind == KIND_REJECTED
+    refused = finalize_fixture("Pergunta", retrieval(), f"Não há informação suficiente [{CID}].")
+    assert refused.kind == KIND_NO_EVIDENCE and refused.reply.sources == []
+
+
+def test_unknown_reason_is_not_copied_to_the_log():
+    for status in ("no_evidence", "index_unavailable"):
+        outcome = outcome_without_answer("q", retrieval(status, "título privado"))
+        assert outcome.to_log()["reason"] == status
+
+
+@pytest.mark.parametrize("reason, expected", [
+    ("empty_authorized_scope", KIND_ACCESS_DENIED), ("context_disabled", KIND_INDEX_UNAVAILABLE),
+])
+def test_restrictive_reason_prevents_generation_even_if_chunks_are_present(reason, expected):
+    generate = Spy()
+    outcome = respond("Pergunta", retrieve=Spy(retrieval(reason=reason)), generate=generate)
+    assert outcome.kind == expected and generate.calls == []

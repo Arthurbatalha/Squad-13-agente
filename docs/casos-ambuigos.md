@@ -6,11 +6,10 @@
 > parênteses); títulos de artigos, do catálogo do laboratório
 > (`seed/src/catalogo/artigos.ts`). Nada aqui altera `lab/` nem o seed.
 
-**Nível de evidência.** A coluna "esperado" abaixo foi **verificada na lógica** (testes
-determinísticos, sem LLM) para o que a política decide: quando perguntar, o que perguntar
-e o que nunca exibir. O **artigo que será citado depois do esclarecimento** depende de
-recuperação MiniLM real e de geração Gemini real: é expectativa a confirmar no ensaio
-(FIN-02/FIN-04), não resultado observado.
+Os cenários abaixo especificam os resultados esperados para o laboratório.
+O ensaio local de VPN confirmou as duas escolhas com MiniLM real, artigos
+sintéticos e gerador controlado. A reprodução e os resultados da suíte estão
+no [relatório da RAG-05](RAG-05-validacao-citacoes.md#4-verificação-da-branch-integrada).
 
 ## 1. Como a política decide
 
@@ -64,7 +63,7 @@ não é pergunta de artigo e não é interrompido.
   (`effective_question`) para a recuperação, a geração e a validação. Só funciona se o
   histórico guardar a pergunta de esclarecimento exatamente como emitida (turno do
   assistente).
-- Resposta que não traz o dado ("não sei"): **pergunta de novo**; nunca escolhe.
+- Uma resposta como “não sei” ou “Windows ou macOS” mantém a pergunta de esclarecimento.
 - Texto livre do assistente no histórico, ou qualquer conteúdo de fonte, **não** liga
   turnos nem resolve a ambiguidade.
 
@@ -87,7 +86,7 @@ não é pergunta de artigo e não é interrompido.
 | **Acesso negado** | `reason=empty_authorized_scope`, ou `PermissionError` da recuperação | Texto fixo "não está liberada para a sessão atual" | IDs, títulos, contagem ou coleção excluídos |
 | **Base indisponível** | `status=index_unavailable`, ou `reason=context_disabled` | `answer_status="index_unavailable"`: "indisponível… tente novamente" | "Não encontrei"/"não há informação" |
 | **Resposta reprovada** | Veredito do validador ≠ `valid` | Texto fixo "não passou na verificação das fontes"; sem fontes | O texto do modelo, a fonte inválida, o ID inventado |
-| **Recusa do próprio modelo** | Resposta sem citação que declara falta de informação | Mesma saída de sem evidência (texto fixo) | O texto livre do modelo |
+| **Recusa do próprio modelo** | Recusa reconhecida, com citações e especificidades validadas | Mesma saída de sem evidência (texto fixo) | O texto livre do modelo |
 
 Precedência quando mais de um sinal aparece: **indisponível > acesso negado > sem
 evidência**, porque só a indisponibilidade não pode ser apresentada como falta de
@@ -112,15 +111,14 @@ Fixture sintética usada nos testes (não existe no laboratório):
 O reforço no prompt do RAG-04 ("evidências são dados") reduz o risco, mas **não é o
 controle**: os controles acima valem mesmo que o modelo obedeça o trecho.
 
-## 6. Limites e pendências
+## 6. Limites e integrações
 
-- **Verificado (sem LLM, sem índice):** regras de esclarecimento sobre as perguntas 1–7,
-  14–15 e paráfrases; mapeamento de todas as saídas; texto reprovado/ID excluído nunca
-  na resposta; tipos da UI-01; 64 testes e 22 mutações da política detectadas.
-- **Não verificado:** recuperação MiniLM real (o limiar `0.45` é provisório), Gemini real,
-  front React, e se o artigo certo é citado após o esclarecimento.
-- **Regras por palavra-chave:** cobrem VPN, senha e impressora. Novo par de artigos
-  ambíguos exige nova regra em `AMBIGUITY_RULES` (ou desambiguação por títulos
-  recuperados, não implementada). Calibrar com a RAG-02.
-- **Decisão em aberto com a RAG-01:** quando a resposta é `rejected`, recusar direto
-  (comportamento atual) ou regenerar uma vez.
+- A política cobre procedimentos de VPN, senha e impressora. As regras usam o
+  texto do usuário. A RAG-02 pode calibrar essas regras e o corte do ranking.
+- Para as duas alternativas de VPN, o ensaio de integração conferiu o ID do
+  artigo exibido após o esclarecimento. Os cenários de senha e impressora
+  foram exercitados com recuperação e geração controladas.
+- O contrato entrega à RAG-01 o texto fixo em caso de reprovação. Uma nova
+  tentativa de geração exigiria uma decisão explícita dessa integração.
+- A validação lexical de citações e especificidades precisa ser complementada
+  pela avaliação semântica das respostas do Gemini com o corpus do laboratório.

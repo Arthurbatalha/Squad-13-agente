@@ -25,6 +25,7 @@ class RAGGenerationGraph:
         return {
             **state,
             "answer": result.text,
+            "prompt_evidence": result.prompt_evidence,
             "model": result.model,
             "input_tokens_estimated": result.input_tokens_estimated,
         }

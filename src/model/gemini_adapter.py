@@ -50,6 +50,7 @@ class GenerationResult:
     model: str
     input_tokens_estimated: int
     output_tokens: Any = None
+    prompt_evidence: tuple[dict[str, str], ...] = ()
 
 
 def estimate_tokens(text: str) -> int:
@@ -171,6 +172,11 @@ class GeminiAdapter:
 
     def build_prompt(self, question: str, evidence: Iterable[Mapping[str, Any]],
                      history: Iterable[Any] | None = None) -> tuple[str, int]:
+        prompt, used, _ = self._prepare_prompt(question, evidence, history)
+        return prompt, used
+
+    def _prepare_prompt(self, question: str, evidence: Iterable[Mapping[str, Any]],
+                        history: Iterable[Any] | None) -> tuple[str, int, tuple[dict[str, str], ...]]:
         if not isinstance(question, str) or not question.strip():
             raise ValueError("A pergunta não pode ser vazia.")
         selected = _normalise_evidence(evidence)[:self.max_evidence]
@@ -182,21 +188,30 @@ class GeminiAdapter:
         while used > self.max_prompt_tokens and selected:
             largest = max(selected, key=lambda item: len(item["content"].encode("utf-8")))
             content = largest["content"]
-            if len(content) <= 1:
-                selected.remove(largest)
+            end = len(content) // 2
+            # Cortar "VPN-FIX-691-A" ou "passo 21" dentro de um token pode
+            # criar um código ou número diferente no texto a validar.
+            while end and not (content[end - 1].isspace() or content[end].isspace()):
+                end -= 1
+            shortened = content[:end].rstrip()
+            if not shortened:
+                words = content.split(maxsplit=1)
+                shortened = words[0] if words else ""
+            if shortened and shortened != content:
+                largest["content"] = shortened
             else:
-                largest["content"] = content[: max(1, len(content) // 2)]
+                selected.remove(largest)
             prompt = self._compose(question.strip(), selected, history_text)
             used = self.token_counter(prompt)
         if used > self.max_prompt_tokens:
             raise PromptBudgetExceeded(
                 "Instruções, histórico e pergunta excedem o orçamento total de contexto."
             )
-        return prompt, used
+        return prompt, used, tuple(selected)
 
     def generate(self, question: str, evidence: Iterable[Mapping[str, Any]],
                  history: Iterable[Any] | None = None) -> GenerationResult:
-        prompt, used = self.build_prompt(question, evidence, history)
+        prompt, used, selected = self._prepare_prompt(question, evidence, history)
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
             messages = [
@@ -222,7 +237,7 @@ class GeminiAdapter:
         if not text:
             raise ModelUnavailable("O provedor retornou uma resposta vazia.")
         usage = getattr(response, "usage_metadata", None)
-        return GenerationResult(text, self.model_name, used, usage)
+        return GenerationResult(text, self.model_name, used, usage, prompt_evidence=selected)
 
     @staticmethod
     def _provider_error(exc: Exception) -> ModelAdapterError:

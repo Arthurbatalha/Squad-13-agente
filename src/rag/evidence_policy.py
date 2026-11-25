@@ -38,8 +38,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping
 
 from src.api.schemas import ClarificationReply, Source, TextReply
+from src.model.gemini_adapter import GenerationResult
 from src.rag.citation_validation import (
-    VERDICT_NO_CITATION,
     ValidationResult,
     validate_answer,
 )
@@ -128,7 +128,7 @@ AMBIGUITY_RULES: tuple[AmbiguityRule, ...] = (
     AmbiguityRule(
         name="vpn_sistema_operacional",
         topic=_rx(r"\bvpn\b"),
-        intent=_rx(r"\b(?:configur|instal|habilit|ativ|conect|acess|us[ao]\b|cri[aoe]|setup)\w*"),
+        intent=_rx(r"\b(?:configur|instal|habilit|ativ|conect|acess|us(?:o|a|ar)\b|cri[aoe]|setup)\w*"),
         resolved_by=_rx(
             r"\b(?:windows|win(?:dows)? ?(?:10|11)|macos|mac ?os|os ?x|macbook|imac|mac|"
             r"ventura|sonoma|apple|linux|ubuntu|android|ios|iphone|ipad)\b"
@@ -143,7 +143,7 @@ AMBIGUITY_RULES: tuple[AmbiguityRule, ...] = (
         name="senha_caminho",
         topic=_rx(r"\bsenha\b"),
         intent=_rx(
-            r"\b(?:redefin|reset|troc|alter|recuper|esquec|renov|mud[ao]\b|perdi\b)\w*"
+            r"\b(?:redefin|reset|troc|alter|recuper|esquec|renov|mud(?:o|a|ar)\b|perdi\b)\w*"
         ),
         resolved_by=_rx(
             r"\bauto ?atendimento\b|\bself ?service\b|\bsuporte\b|\batendente\b|\bramal\b"
@@ -222,16 +222,19 @@ def effective_question(question: str, history: Iterable[Any] | None = None) -> s
     return text
 
 
-def _matching_rule(text: str) -> AmbiguityRule | None:
+def _matching_rule(text: str, latest_user_turn: str) -> AmbiguityRule | None:
     folded = _fold(text)
     if _CASE_LOOKUP.search(folded):
         return None
+    # Uma dúvida sobre outro detalhe mantém as escolhas já afirmadas no turno.
+    detail = re.sub(r"\bnao (?:sei|lembro|tenho certeza) (?:se|qual)\b[^.!?;,]*",
+                    "", _fold(latest_user_turn))
+    options = re.split(r"\bou\b", detail)
     for rule in AMBIGUITY_RULES:
-        if (
-            rule.topic.search(folded)
-            and rule.intent.search(folded)
-            and not rule.resolved_by.search(folded)
-        ):
+        if not (rule.topic.search(folded) and rule.intent.search(folded)):
+            continue
+        alternatives = sum(bool(rule.resolved_by.search(option)) for option in options)
+        if alternatives != 1:
             return rule
     return None
 
@@ -272,7 +275,11 @@ def _text_outcome(kind: str, reason: str, question: str,
 def detect_ambiguity(question: str, history: Iterable[Any] | None = None) -> PolicyOutcome | None:
     """Antes da recuperação: `ClarificationReply` se faltar o dado que muda o procedimento."""
     effective = effective_question(question, history)
-    rule = _matching_rule(effective)
+    return _clarification(effective, question)
+
+
+def _clarification(effective: str, latest_user_turn: str) -> PolicyOutcome | None:
+    rule = _matching_rule(effective, latest_user_turn)
     if rule is None:
         return None
     reply = ClarificationReply(question=rule.question, options=list(rule.options))
@@ -291,22 +298,24 @@ def outcome_without_answer(question: str, retrieval: Mapping[str, Any]) -> Polic
     status = retrieval.get("status")
     if status not in _RETRIEVAL_STATUSES:
         raise ValueError(f"status de recuperação desconhecido: {status!r}")
+    reason = retrieval.get("reason")
+    if status == "index_unavailable" or reason in _UNAVAILABLE_REASONS:
+        code = reason if reason in _UNAVAILABLE_REASONS or reason == _DENIED_REASON else "index_unavailable"
+        return _text_outcome(KIND_INDEX_UNAVAILABLE, code, question)
+    if reason == _DENIED_REASON:
+        return _text_outcome(KIND_ACCESS_DENIED, _DENIED_REASON, question)
     if status == "evidence":
         if not retrieval.get("chunks"):
             raise ValueError("status=evidence sem chunks.")
         return None
-    reason = retrieval.get("reason")
-    if status == "index_unavailable" or reason in _UNAVAILABLE_REASONS:
-        return _text_outcome(KIND_INDEX_UNAVAILABLE, str(reason or status), question)
-    if reason == _DENIED_REASON:
-        return _text_outcome(KIND_ACCESS_DENIED, _DENIED_REASON, question)
-    return _text_outcome(KIND_NO_EVIDENCE, str(reason or "no_evidence"), question)
+    code = reason if reason in ("empty_index", "insufficient_evidence") else "no_evidence"
+    return _text_outcome(KIND_NO_EVIDENCE, code, question)
 
 
 _REFUSAL = _rx(
     r"\bnao (?:ha informac|tenho informac|encontrei|consta|ha evidenc|foi possivel encontrar|"
-    r"posso responder|sei\b)|\binformacao suficiente\b|\binformacoes suficientes\b|"
-    r"\bevidencias nao\b|\bas fontes nao\b"
+    r"posso responder|sei\b)|\b(?:informac(?:ao|oes)|evidencias?) insuficientes?\b|"
+    r"\b(?:as fontes|as evidencias) nao (?:contem|trazem|permitem|sustentam|informam)\b"
 )
 
 
@@ -314,50 +323,67 @@ def _looks_like_refusal(answer: str) -> bool:
     return _REFUSAL.search(_fold(answer)) is not None
 
 
-def finalize_answer(question: str, retrieval: Mapping[str, Any], answer: str) -> PolicyOutcome:
-    """Depois da geração: aprova com fontes do catálogo ou substitui por texto fixo.
+def _matches_catalog(shown, chunks) -> bool:
+    catalog = {chunk["chunk_id"]: chunk for chunk in chunks}
+    for item in shown:
+        if not isinstance(item, Mapping):
+            return False
+        original = catalog.get(item.get("chunk_id"))
+        if original is None:
+            return False
+        for field in ("source_type", "source_id", "title", "source_reference"):
+            if str(original[field]) != str(item.get(field)):
+                return False
+        content = item.get("content")
+        if not isinstance(content, str) or not content or not original["content"].startswith(content):
+            return False
+    return True
 
-    `retrieval["chunks"]` deve ser exatamente a lista enviada ao gerador (RAG-04 usa no
-    máximo `max_evidence`, 4 por padrão, igual ao `max_chunks` da RAG-03).
-    """
+
+def finalize_answer(question: str, retrieval: Mapping[str, Any], answer: str | GenerationResult,
+                    *, prompt_evidence=None) -> PolicyOutcome:
+    """Confere o contexto efetivo do adaptador (ou o snapshot explícito do grafo)."""
     if outcome_without_answer(question, retrieval) is not None:
         raise ValueError("Sem evidência: não há resposta gerada para finalizar.")
-    check = validate_answer(answer, retrieval["chunks"], question=question)
-    if check.ok:
-        text = answer.strip()
-        if retrieval.get("incomplete"):
-            text += INCOMPLETE_NOTE
-        reply = TextReply(
-            text=text,
-            sources=[Source(**s) for s in check.sources],
-            answer_status=ANSWER_STATUS[KIND_ANSWERED],
-        )
-        return PolicyOutcome(KIND_ANSWERED, reply, "validated", question, check)
-    # `no_citation` só ocorre sem citação inválida nem especificidade inventada. Se o
-    # texto é uma recusa do próprio modelo, o resultado é "sem evidência" (texto fixo).
-    if check.verdict == VERDICT_NO_CITATION and _looks_like_refusal(answer):
+    if isinstance(answer, GenerationResult):
+        prompt_evidence = answer.prompt_evidence
+        answer = answer.text
+    if prompt_evidence is None:
+        return _text_outcome(KIND_REJECTED, "missing_prompt_evidence", question)
+    shown = tuple(prompt_evidence)
+    if not _matches_catalog(shown, retrieval["chunks"]):
+        return _text_outcome(KIND_REJECTED, "invalid_prompt_evidence", question)
+    refusal = _looks_like_refusal(answer)
+    check = validate_answer(answer, shown, question=question, require_citation=not refusal)
+    if not check.ok:
+        return _text_outcome(KIND_REJECTED, f"validator:{check.verdict}", question, check)
+    if refusal:
         return _text_outcome(KIND_NO_EVIDENCE, "model_declined", question, check)
-    return _text_outcome(KIND_REJECTED, f"validator:{check.verdict}", question, check)
+    text = answer.strip()
+    if retrieval.get("incomplete"):
+        text += INCOMPLETE_NOTE
+    reply = TextReply(text=text, sources=[Source(**s) for s in check.sources],
+                      answer_status=ANSWER_STATUS[KIND_ANSWERED])
+    return PolicyOutcome(KIND_ANSWERED, reply, "validated", question, check)
 
 
 def respond(
     question: str,
     *,
     retrieve: Callable[[str], Mapping[str, Any]],
-    generate: Callable[[str, list], str],
+    generate: Callable[[str, list], GenerationResult],
     history: Iterable[Any] | None = None,
 ) -> PolicyOutcome:
     """Fluxo completo: esclarecer → recuperar → (recusar | gerar → validar).
 
     `retrieve(q)` embrulha `PublishedRetrieval.retrieve(q, principal)`; `generate(q, chunks)`
-    embrulha a geração RAG-04 e devolve o texto. Um `PermissionError` (ex.: `ToolDenied`)
-    vindo de `retrieve` vira acesso negado. Outras exceções, inclusive as do provedor de
-    modelo, propagam.
+    devolve o GenerationResult da RAG-04, incluindo o contexto efetivo.
+    PermissionError da recuperação resulta em acesso negado. Falhas do modelo propagam.
     """
-    ambiguity = detect_ambiguity(question, history)
+    effective = effective_question(question, history)
+    ambiguity = _clarification(effective, question)
     if ambiguity is not None:
         return ambiguity
-    effective = effective_question(question, history)
     try:
         retrieval = retrieve(effective)
     except PermissionError:

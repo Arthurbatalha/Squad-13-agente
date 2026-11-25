@@ -1,7 +1,7 @@
 """RAG-05 (metade A) — validação determinística de citações e de especificidades.
 
 Entra a resposta gerada (RAG-04) e a lista EXATA de evidências enviadas ao
-gerador (as `chunks` da RAG-03). Sai um veredito. Nada aqui chama LLM, rede,
+gerador (`GenerationResult.prompt_evidence`). Sai um veredito. Nada aqui chama LLM, rede,
 índice ou GLPI, e nada depende do prompt: é uma checagem posterior.
 
 O que verifica
@@ -11,7 +11,7 @@ O que verifica
      valem com o tipo: artigo 12 não autoriza caso 12.
   3. A resposta não traz especificidades ausentes das evidências: códigos com
      dígito (VPN-FIX-691), versões (2.3.1) e "passo N". A pergunta do usuário
-     também conta como origem, para a recusa poder repeti-la.
+     só conta como origem em recusas e esclarecimentos.
   4. As fontes mostradas ao usuário vêm do CATÁLOGO RECUPERADO, nunca do texto
      do modelo (título/referência inventados não chegam à tela).
 
@@ -30,7 +30,10 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
+from itertools import chain
 from typing import Any, Iterable, Mapping
+
+from src.rag.chunk_contract import PREPARATION_VERSION
 
 VERDICT_VALID = "valid"
 VERDICT_NO_CITATION = "no_citation"
@@ -49,21 +52,26 @@ EXCERPT_MAX_CHARS = 280
 _REQUIRED_EVIDENCE_KEYS = ("chunk_id", "source_type", "source_id", "title", "content")
 
 # `{preparation_version}:{source_type}:{source_id}:{ordinal}` (chunk_contract.py).
-# Deliberadamente frouxo no ordinal: um ID quase certo deve ser pego e reprovado.
-_CHUNK_ID_RE = re.compile(
-    r"(?<![A-Za-z0-9._-])[A-Za-z0-9][A-Za-z0-9._-]*:(?:article|case):\d+:\d+(?![A-Za-z0-9_])"
+# Capture também sufixos incorretos para que um prefixo válido não passe por ID.
+# Um ponto final da frase só pertence ao identificador se vier seguido de texto.
+_ID = r"[\w-]+(?:\.[\w-]+)*"
+# Símbolos admitidos em segmentos de URL também distinguem uma referência
+# inválida de um ID numérico seguido de pontuação da frase.
+_SOURCE_ID = r"[\w%+~@=&$-]+(?:\.[\w%+~@=&$-]+)*"
+_NUMBER_LABEL = r"\s*(?:n[º°o.]*\s*)?#?\s*"
+_CHUNK_PREFIX = rf"(?:{_ID}:(?:article|case)|{re.escape(PREPARATION_VERSION)}:[\w-]+)"
+_CITATION_RE = re.compile(
+    rf"(?P<chunk>(?<![\w.-]){_CHUNK_PREFIX}:{_ID}:{_ID}(?::[\w.-]+)*)"
+    rf"|(?:/Knowledgebase/Article/|\b(?:artigo|article)\b{_NUMBER_LABEL}(?=\d))(?P<article>{_SOURCE_ID})"
+    rf"|(?:/(?:Assistance/)?Ticket/|\b(?:chamado|ticket)\b{_NUMBER_LABEL}(?=\d))(?P<case>{_SOURCE_ID})",
+    re.IGNORECASE,
 )
-_NUM = r"\s*(?:n[º°o.]*\s*)?#?\s*(\d+)\b"
-_ARTICLE_REF_RE = re.compile(r"\b(?:artigo|article)\b" + _NUM, re.IGNORECASE)
-_TICKET_REF_RE = re.compile(r"\b(?:chamado|ticket)\b" + _NUM, re.IGNORECASE)
-_ARTICLE_PATH_RE = re.compile(r"/Knowledgebase/Article/(\d+)", re.IGNORECASE)
-_TICKET_PATH_RE = re.compile(r"/Ticket/(\d+)", re.IGNORECASE)
 
 _VERSION_RE = re.compile(r"(?<![\w.])\d+(?:\.\d+){1,3}(?!\w|\.\d)")
 _CODE_RE = re.compile(
     r"(?<![A-Za-z0-9_-])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+(?![A-Za-z0-9_])"
 )
-_STEP_RE = re.compile(r"\b(?:passo|etapa|step)\b" + _NUM, re.IGNORECASE)
+_STEP_RE = re.compile(r"\b(?:passo|etapa|step)\b" + _NUMBER_LABEL + r"(\d+)\b", re.IGNORECASE)
 _LIST_ITEM_RE = re.compile(r"(?m)^\s*(\d+)[.)]\s")
 
 
@@ -102,17 +110,14 @@ class ValidationResult:
 
 
 def _canon(text: str) -> str:
-    """Minúsculas, sem acento de composição e com `-`/`_` tratados como espaço."""
-    text = unicodedata.normalize("NFKC", str(text)).casefold()
-    text = re.sub(r"[-_]", " ", text)
-    return re.sub(r"[ \t]+", " ", text)
+    return unicodedata.normalize("NFKC", text).casefold()
 
 
 def _contains(haystack: str, needle: str) -> bool:
-    """Presença com limites: `691` não casa com `6910`, nem `2.3` com `2.3.1`."""
-    pattern = (
-        r"(?<![a-z0-9])(?<!\d\.)" + re.escape(needle) + r"(?![a-z0-9])(?!\.\d)"
-    )
+    # Admite "Windows 11" para "Windows-11", preservando as bordas do código.
+    parts = re.split(r"[-_]", needle)
+    token = r"(?:[-_]|[^\S\r\n]+)".join(map(re.escape, parts))
+    pattern = r"(?<![\w-])(?<!\d\.)" + token + r"(?![\w-]|\.\d)"
     return re.search(pattern, haystack) is not None
 
 
@@ -191,8 +196,8 @@ def validate_answer(
 ) -> ValidationResult:
     """Valida `answer` contra as `evidence` que foram enviadas ao gerador.
 
-    `evidence` deve ser exatamente a lista passada ao `GeminiAdapter` (RAG-04),
-    isto é, `result["chunks"]` da RAG-03 quando `status == "evidence"`.
+    `evidence` deve ser o `prompt_evidence` devolvido pelo adaptador após aplicar
+    o orçamento do prompt aos trechos autorizados da RAG-03.
     `require_citation=False` serve para recusa/esclarecimento, que não cita.
 
     Precedência do veredito: invalid_citation > unsupported_specifics >
@@ -202,67 +207,42 @@ def validate_answer(
         raise TypeError("answer deve ser texto.")
     items = _normalise_evidence(evidence)
     by_chunk = {item["chunk_id"]: item for item in items}
-    first_of_source: dict[tuple[str, str], dict[str, str]] = {}
-    for item in items:
-        first_of_source.setdefault((item["source_type"], item["source_id"]), item)
+    matches = list(_CITATION_RE.finditer(answer))
+    cited = list(dict.fromkeys(m["chunk"] for m in matches if m["chunk"] in by_chunk))
 
-    invalid: list[InvalidCitation] = []
-    cited: list[str] = []
-    display: list[dict[str, str]] = []
-    displayed_chunks: set[str] = set()
+    # Uma referência à fonte prefere um trecho explicitamente citado dela.
+    preferred = {}
+    for item in chain((by_chunk[token] for token in cited), items):
+        preferred.setdefault((item["source_type"], item["source_id"]), item)
 
-    def show(item: Mapping[str, str]) -> None:
-        if item["chunk_id"] not in displayed_chunks:
-            displayed_chunks.add(item["chunk_id"])
-            display.append(_display_source(item))
-
-    # 1) citações por chunk_id
+    invalid = []
+    display = {}
     chunk_spans = []
-    for match in _CHUNK_ID_RE.finditer(answer):
-        chunk_spans.append(match.span())
-        token = match.group(0)
-        item = by_chunk.get(token)
-        if item is None:
-            invalid.append(InvalidCitation(token, KIND_CHUNK_ID, REASON_NOT_RETRIEVED))
-        elif token not in cited:
-            cited.append(token)
-            show(item)
+    for match in matches:
+        kind = match.lastgroup
+        if kind == "chunk":
+            chunk_spans.append(match.span())
+            item = by_chunk.get(match["chunk"])
+            if item is None:
+                invalid.append(InvalidCitation(match[0], KIND_CHUNK_ID, REASON_NOT_RETRIEVED))
+        else:
+            item = preferred.get((kind, match[kind]))
+            if item is None:
+                label = KIND_ARTICLE_REFERENCE if kind == "article" else KIND_TICKET_REFERENCE
+                invalid.append(InvalidCitation(match[0], label, REASON_UNKNOWN_SOURCE))
+        if item is not None:
+            display[item["chunk_id"]] = item
 
-    # 2) referências em linguagem natural ou por caminho (tipo + ID)
-    reference_sources: list[dict[str, str]] = []
-    for kind, source_type, regexes in (
-        (KIND_ARTICLE_REFERENCE, "article", (_ARTICLE_REF_RE, _ARTICLE_PATH_RE)),
-        (KIND_TICKET_REFERENCE, "case", (_TICKET_REF_RE, _TICKET_PATH_RE)),
-    ):
-        for regex in regexes:
-            for match in regex.finditer(answer):
-                source = first_of_source.get((source_type, match.group(1)))
-                if source is None:
-                    invalid.append(
-                        InvalidCitation(match.group(0).strip(), kind, REASON_UNKNOWN_SOURCE)
-                    )
-                else:
-                    reference_sources.append(source)
-
-    cited_source_keys = {
-        (by_chunk[c]["source_type"], by_chunk[c]["source_id"]) for c in cited
-    }
-    for source in reference_sources:
-        key = (source["source_type"], source["source_id"])
-        if key not in cited_source_keys:
-            cited_source_keys.add(key)
-            show(source)
-
-    # 3) especificidades sem suporte (IDs de chunk não contam como código)
-    corpus = "\n".join(f"{i['title']}\n{i['content']}" for i in items) + "\n" + question
+    corpus = "\n".join(f"{i['title']}\n{i['content']}" for i in items)
+    if not require_citation:
+        corpus += "\n" + question
     unsupported = _unsupported_specifics(_blank_spans(answer, chunk_spans), corpus)
 
-    has_citation = bool(cited_source_keys)
     if invalid:
         verdict = VERDICT_INVALID_CITATION
     elif unsupported:
         verdict = VERDICT_UNSUPPORTED
-    elif require_citation and not has_citation:
+    elif require_citation and not display:
         verdict = VERDICT_NO_CITATION
     else:
         verdict = VERDICT_VALID
@@ -272,5 +252,5 @@ def validate_answer(
         cited_chunk_ids=tuple(cited),
         invalid_citations=tuple(invalid),
         unsupported_specifics=tuple(unsupported),
-        sources=tuple(display),
+        sources=tuple(_display_source(item) for item in display.values()),
     )

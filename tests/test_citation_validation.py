@@ -1,11 +1,12 @@
 """RAG-05 (metade A) — testes da validação de citações.
 
 Rodar:  python -m pytest -q tests/test_citation_validation.py
-Sem LLM, sem rede, sem índice: usa evidências sintéticas no formato `chunks`
-da RAG-03. Prova a mecânica da validação, não a qualidade das respostas reais.
+Fixtures sintéticas e gerador simulado. O ensaio de integração publica um índice
+temporário e aceita RAG05_TEST_REAL_MINILM=1 para usar o encoder em cache.
 """
 
 import json
+import os
 
 import pytest
 
@@ -244,3 +245,142 @@ def test_malformed_evidence_and_answer_type_raise():
         validate_answer("x", ["não é mapeamento"])
     with pytest.raises(TypeError):
         validate_answer(None, [chunk()])
+
+@pytest.mark.parametrize("suffix", ["-extra", ".1", "abc", ":7"])
+def test_valid_citation_does_not_excuse_another_with_a_fabricated_suffix(suffix):
+    result = verdict(f"Veja [{VPN}] e [{VPN}{suffix}].")
+    assert result.verdict == VERDICT_INVALID_CITATION
+    assert [entry.token for entry in result.invalid_citations] == [VPN + suffix]
+
+
+def test_unknown_chunk_type_is_rejected_and_ipv6_is_not_a_citation():
+    bad = VPN.replace(":article:", ":note:")
+    assert verdict(f"Veja {VPN} e {bad}.").invalid_citations[0].token == bad
+    assert verdict(f"Endereço fe80:abcd:1234:1234::1 [{VPN}].").ok
+
+
+@pytest.mark.parametrize("reference", [
+    "/Knowledgebase/Article/12abc", "/Knowledgebase/Article/12%31",
+    "artigo 12-extra", "/Assistance/Ticket/12.1",
+])
+def test_source_reference_requires_the_whole_identifier(reference):
+    result = verdict(f"Veja [{VPN}] e {reference}.", [chunk(), chunk(source_type="case")])
+    assert result.verdict == VERDICT_INVALID_CITATION
+    assert [entry.token for entry in result.invalid_citations] == [reference]
+
+
+@pytest.mark.parametrize("different_code", ["VPN-FIX-691-A", "X-VPN-FIX-691", "VPN_FIX_691_A"])
+def test_part_of_a_different_code_is_not_evidence(different_code):
+    result = verdict(f"Confira VPN-FIX-691 [{VPN}].", [chunk(content=different_code)])
+    assert result.verdict == VERDICT_UNSUPPORTED
+
+
+def test_question_alone_cannot_support_a_factual_step_or_code():
+    result = verdict(f"Faça o passo 9 para VPN-FIX-777 [{VPN}].",
+                     question="Como fazer o passo 9 para VPN-FIX-777?")
+    assert result.verdict == VERDICT_UNSUPPORTED
+    assert set(result.unsupported_specifics) == {"passo 9", "VPN-FIX-777"}
+
+
+def test_source_order_uses_first_mention_and_prefers_explicit_chunk():
+    items = [chunk(), chunk(source_id=20), chunk(ordinal=1)]
+    result = verdict(f"Veja o artigo 20, o artigo 12 e o trecho [{VPN_2}].", items)
+    assert result.ok
+    assert result.cited_chunk_ids == (VPN_2,)
+    assert [source["chunk_id"] for source in result.sources] == [items[1]["chunk_id"], VPN_2]
+
+
+class FixtureModel:
+    def __init__(self, answer):
+        self.answer = answer
+        self.messages = None
+
+    def invoke(self, messages):
+        self.messages = messages
+        return self.answer
+
+
+def test_only_text_and_ids_in_the_final_prompt_can_support_a_reply():
+    from src.agent_core import build_graph
+    from src.model.gemini_adapter import GeminiAdapter
+
+    visible = chunk(content="Orientação. " * 400 + "VPN-FIX-888")
+    hidden = chunk(source_id=20)
+    question = "Como conectar?"
+    model = FixtureModel(f"Use VPN-FIX-888 [{VPN}] e consulte o artigo 20.")
+    adapter = GeminiAdapter(model, max_evidence=1, max_prompt_tokens=500)
+    state = build_graph(model_adapter=adapter).invoke(
+        {"question": question, "evidence": [visible, hidden]}
+    )
+    selected, = state["prompt_evidence"]
+    assert visible["content"].endswith("VPN-FIX-888")
+    assert visible["content"].startswith(selected["content"])
+    assert selected["content"] in str(model.messages)
+    assert "VPN-FIX-888" not in str(model.messages)
+    assert hidden["chunk_id"] not in str(model.messages)
+    checked = validate_answer(state["answer"], state["prompt_evidence"], question=question)
+    assert checked.verdict == VERDICT_INVALID_CITATION
+    assert checked.unsupported_specifics == ("VPN-FIX-888",)
+    assert [entry.token for entry in checked.invalid_citations] == ["artigo 20"]
+
+
+def test_prompt_budget_does_not_create_a_different_error_code():
+    from src.model.gemini_adapter import GeminiAdapter
+
+    # O ponto médio do conteúdo cai entre "691" e "-A".
+    content = "VPN-FIX-691-A continua"
+    item = chunk(content=content)
+    model = FixtureModel(f"Use VPN-FIX-691 [{VPN}].")
+    adapter = GeminiAdapter(model, token_counter=len)
+    _, full_size = adapter.build_prompt("VPN?", [item])
+    adapter.max_prompt_tokens = full_size - 1
+    generated = adapter.generate("VPN?", [item])
+    assert generated.prompt_evidence[0]["content"] == "VPN-FIX-691-A"
+    checked = validate_answer(generated.text, generated.prompt_evidence)
+    assert checked.verdict == VERDICT_UNSUPPORTED
+    assert checked.unsupported_specifics == ("VPN-FIX-691",)
+
+
+def test_citations_from_reopened_authorized_index(tmp_path):
+    from src.api.schemas import Source
+    from src.authorization.policies import Principal
+    from src.authorization.service import AuthorizationService
+    from src.model.gemini_adapter import GeminiAdapter
+    from src.rag.busca_artigos import recuperar_trechos
+    from src.rag.corpus import CorpusService
+    from src.rag.embeddings import EmbeddingService
+    from src.rag.local_index import LocalIndexStore
+    from src.rag.retrieval import build_published_retrieval
+    from test.embedding_fakes import ModelSpy
+
+    encoder = (EmbeddingService(local_files_only=True)
+               if os.environ.get("RAG05_TEST_REAL_MINILM") == "1"
+               else EmbeddingService(model=ModelSpy()))
+    procedure = "Confira o erro VPN-FIX-691 no cliente de VPN."
+    sources = [("article", {"id": i, "title": "VPN (fixture sintética)",
+                            "content": f"<p>{procedure}</p>",
+                            "source_reference": "/Knowledgebase/Article"}) for i in (12, 20)]
+    corpus = CorpusService(encoder).prepare_sources(sources)
+    store = LocalIndexStore(tmp_path, "article", embedding=encoder.config)
+    generation = store.create_candidate(corpus).generation_id
+    store.activate(generation)
+    before = encoder.stats
+    reader = build_published_retrieval(
+        AuthorizationService(None), encoder=encoder, index_dir=tmp_path,
+        scope_resolver=lambda principal, kind: {12},
+    )
+    retrieval = recuperar_trechos(procedure, Principal.staff(13), retriever=reader)
+    assert retrieval["status"] == "evidence"
+    assert retrieval["collections"]["article"]["generation"] == generation
+    assert [c["chunk_id"] for c in retrieval["chunks"]] == [VPN]
+    assert encoder.stats["document_texts"] == before["document_texts"]
+    assert encoder.stats["question_texts"] == before["question_texts"] + 1
+
+    model = FixtureModel(f"{procedure} [{VPN}]")
+    response = GeminiAdapter(model).generate(procedure, retrieval["chunks"])
+    checked = validate_answer(response.text, response.prompt_evidence, question=procedure)
+    assert checked.ok
+    source, = checked.sources
+    assert Source.model_validate(source).chunk_id == VPN
+    assert source["reference"] == "/Knowledgebase/Article"
+    assert validate_answer("Veja o artigo 20.", response.prompt_evidence).verdict == VERDICT_INVALID_CITATION
