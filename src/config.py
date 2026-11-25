@@ -28,7 +28,10 @@ class AppSettings:
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.1-flash-lite"
     gemini_timeout_seconds: float = 30.0
+    gemini_max_retries: int = 0
     rag_max_prompt_tokens: int = 8192
+    rag_max_history_messages: int = 20
+    rag_agent_recursion_limit: int = 8
 
 
 def _read(name: str) -> str | None:
@@ -84,5 +87,8 @@ def load_settings(*, require_glpi: bool = False) -> AppSettings:
         gemini_api_key=_read("GEMINI_API_KEY"),
         gemini_model=_read("GEMINI_MODEL") or "gemini-3.1-flash-lite",
         gemini_timeout_seconds=float(_read("GEMINI_TIMEOUT_SECONDS") or "30"),
+        gemini_max_retries=int(_read("GEMINI_MAX_RETRIES") or "0"),
         rag_max_prompt_tokens=int(_read("RAG_MAX_PROMPT_TOKENS") or "8192"),
+        rag_max_history_messages=int(_read("RAG_MAX_HISTORY_MESSAGES") or "20"),
+        rag_agent_recursion_limit=int(_read("RAG_AGENT_RECURSION_LIMIT") or "8"),
     )

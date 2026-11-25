@@ -1,5 +1,4 @@
 node_modules/
-frontend/dist/
 lab/.env
 *.log
 .DS_Store
@@ -12,3 +11,6 @@ venv/
 .env
 settings.json/
 data/chroma/
+data/index/
+data/article_sync.lock.sqlite3
+data/article_sync_runs.sqlite3

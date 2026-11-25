@@ -1,7 +1,9 @@
 """Ensaio opcional no navegador, exclusivamente com o adapter mock.
 
 Requer Playwright e Chromium, ou --browser /caminho/do/navegador.
-Execute contra a API servindo frontend/dist; screenshots vão para --output.
+Execute contra o frontend em execução (Vite em http://localhost:5173, com
+proxy /api) ou um servidor estático; a API deve estar em modo mock.
+Screenshots vão para --output.
 """
 
 import argparse
@@ -73,7 +75,7 @@ def verify(base_url: str, browser_path: str | None, output: Path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--url", default="http://127.0.0.1:8000")
+    parser.add_argument("--url", default="http://localhost:5173")
     parser.add_argument("--browser", default=None)
     parser.add_argument("--output", type=Path, default=Path("/tmp/ui02-browser"))
     args = parser.parse_args()

@@ -111,6 +111,33 @@ class SessionService:
             raise SessionUnavailable("Conversa indisponível.")
         return conversation
 
+    def restore(self, session_id: str, thread_id: str, *, staff_user_id: int) -> dict:
+        """Reidrata o vínculo já validado pelo backend após reiniciar o processo.
+
+        A credencial e o personagem vieram do SQLite da aplicação; não se
+        consulta o GLPI por mensagem. O histórico canônico da conversa real
+        fica no checkpoint, não nesta estrutura em memória.
+        """
+        if not isinstance(session_id, str) or not session_id:
+            raise SessionUnavailable("Conversa indisponível.")
+        if type(staff_user_id) is not int or staff_user_id <= 0:
+            raise InvalidCharacter("Selecione um técnico disponível.")
+        with self._lock:
+            existing = self._sessions.get(session_id)
+            if existing is not None:
+                if (existing.thread_id != thread_id
+                        or existing.staff_user_id != staff_user_id):
+                    raise SessionUnavailable("Conversa indisponível.")
+                return existing.public()
+            conversation = _Conversation(staff_user_id, thread_id=thread_id)
+            self._sessions[session_id] = conversation
+            return conversation.public()
+
+    def forget(self, session_id: str) -> None:
+        """Descarta a credencial em memória após troca de personagem."""
+        with self._lock:
+            self._sessions.pop(session_id, None)
+
     def resume(self, session_id: str, thread_id: str) -> dict:
         with self._lock:
             return self._owned(session_id, thread_id).public()

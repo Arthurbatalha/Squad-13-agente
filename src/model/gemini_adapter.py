@@ -142,7 +142,7 @@ class GeminiAdapter:
                 model=settings.gemini_model,
                 google_api_key=key,
                 timeout=settings.gemini_timeout_seconds,
-                max_retries=0,
+                max_retries=settings.gemini_max_retries,
             )
         except Exception as exc:
             raise ModelUnavailable("Não foi possível inicializar o provedor Gemini.") from exc

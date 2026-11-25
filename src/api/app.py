@@ -25,7 +25,7 @@ from src.config import STATE_FILE
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -33,6 +33,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.api.backend import ChatBackend, ChatBackendError
 from src.api.mock_backend import MockChatBackend
+from src.api.real_backend import SESSION_COOKIE, RealChatBackend
 from src.api.schemas import (
     CharactersResponse,
     CreateSessionRequest,
@@ -52,7 +53,6 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
-FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 _ERRORS = {
     404: {"model": ErrorResponse, "description": "session_not_found | character_not_found"},
@@ -65,13 +65,41 @@ _ERRORS = {
 }
 
 
-def build_backend() -> ChatBackend:
+def build_backend(
+    graph=None, state_file: Optional[Path] = None
+) -> ChatBackend:
     kind = os.getenv("CHAT_BACKEND", "mock").strip().lower()
     if kind == "mock":
         return MockChatBackend()
+    if kind == "real":
+        if graph is None:
+            raise RuntimeError(
+                "CHAT_BACKEND=real exige o grafo/checkpointer criado pela aplicação."
+            )
+        return RealChatBackend(
+            graph=graph,
+            state_file=state_file if state_file is not None else STATE_FILE,
+        )
     raise RuntimeError(
-        f"CHAT_BACKEND={kind!r} ainda não existe. Valor suportado: 'mock' "
-        "(o adaptador real entra com RAG-01)."
+        f"CHAT_BACKEND={kind!r} inválido. Valores suportados: 'mock' e 'real'."
+    )
+
+
+def _cookie_secure() -> bool:
+    return os.getenv("RAG01_COOKIE_SECURE", "0").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=8 * 60 * 60,
+        httponly=True,
+        samesite="lax",
+        secure=_cookie_secure(),
+        path="/api",
     )
 
 
@@ -123,25 +151,55 @@ async def lifespan(app: FastAPI):
                     "Article index startup could not be initialized (%s).",
                     type(exc).__name__,
                 )
+        startup = getattr(app.state.backend, "startup", None)
+        if callable(startup):
+            await asyncio.to_thread(startup)
         yield
     finally:
+        close = getattr(app.state.backend, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                logger.warning("Falha ao fechar o backend.")
         app.state.sqlite_conn.close()
 
 
 def create_app(
     backend: Optional[ChatBackend] = None,
     cors_origins: Optional[list[str]] = None,
-    frontend_dist: Optional[Path] = FRONTEND_DIST,
+    frontend_dist: Optional[Path] = None,
     state_file: Optional[Path] = None,
     sync_coordinator_factory: Optional[Callable] = None,
+    backend_factory: Optional[Callable] = None,
+    graph_factory: Optional[Callable] = None,
 ) -> FastAPI:
-    backend = backend or build_backend()
+    target_file = Path(state_file) if state_file is not None else STATE_FILE
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    init_db(target_file)
+
+    conn = sqlite3.connect(target_file, check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
+    checkpointer.setup()
+    graph = (
+        graph_factory(checkpointer)
+        if graph_factory is not None
+        else build_graph(checkpointer)
+    )
+
+    if backend is None:
+        if backend_factory is not None:
+            backend = backend_factory(graph, target_file)
+        else:
+            backend = build_backend(graph, target_file)
+
     origins = cors_origins
     if origins is None:
         raw = os.getenv("CORS_ORIGINS", DEFAULT_CORS_ORIGINS)
         origins = [o.strip() for o in raw.split(",") if o.strip()]
 
     app = FastAPI(title="Chatbot GLPI — API", version="0.1.0", lifespan=lifespan)
+    app.state.backend = backend
     app.state.sync_coordinator_factory = sync_coordinator_factory
     app.state.article_sync_run = None
     app.state.article_index_state = "unavailable"
@@ -149,13 +207,14 @@ def create_app(
     app.state.article_sync_ledger = None
     app.state.article_index_store = None
 
-    # Origem restrita ao front; sem credenciais/cookies.
+    # O front usa o proxy do Vite (mesma origem). Em dev direto, o cookie
+    # HttpOnly exige credenciais CORS; as origens continuam explícitas.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
-        allow_credentials=False,
+        allow_credentials=True,
     )
 
     # ----- erros -----------------------------------------------------------
@@ -249,15 +308,42 @@ def create_app(
         return CharactersResponse(characters=backend.list_characters())
 
     @app.post("/api/sessions", response_model=SessionInfo, status_code=201, responses=_ERRORS)
-    def create_session(body: CreateSessionRequest):
-        return backend.create_session(body.character_id)
+    def create_session(body: CreateSessionRequest, response: Response = None):
+        credential = getattr(backend, "create_session_credential", None)
+        if credential is None:
+            return backend.create_session(body.character_id)
+        info, token = credential(body.character_id)
+        if response is not None:
+            _set_session_cookie(response, token)
+        return info
 
     @app.get("/api/sessions/{thread_id}", response_model=SessionInfo, responses=_ERRORS)
-    def get_session(thread_id: str):
+    def get_session(thread_id: str, request: Request = None):
+        token = request.cookies.get(SESSION_COOKIE) if request is not None else None
+        if token:
+            return backend.get_session(thread_id, session_token=token)
         return backend.get_session(thread_id)
 
     @app.post("/api/sessions/{thread_id}/switch", response_model=SessionInfo, responses=_ERRORS)
-    def switch_session(thread_id: str, body: CreateSessionRequest):
+    def switch_session(
+        thread_id: str,
+        body: CreateSessionRequest,
+        request: Request = None,
+        response: Response = None,
+    ):
+        token = request.cookies.get(SESSION_COOKIE) if request is not None else None
+        credential = getattr(backend, "switch_session_credential", None)
+        if credential is not None:
+            info, new_token = credential(
+                thread_id, body.character_id, session_token=token
+            )
+            if response is not None:
+                _set_session_cookie(response, new_token)
+            return info
+        if token:
+            return backend.switch_session(
+                thread_id, body.character_id, session_token=token
+            )
         return backend.switch_session(thread_id, body.character_id)
 
     @app.post(
@@ -265,8 +351,14 @@ def create_app(
         response_model=MessageResponse,
         responses=_ERRORS,
     )
-    def send_message(thread_id: str, body: MessageRequest):
-        reply = backend.handle_message(thread_id, body.text)
+    def send_message(
+        thread_id: str, body: MessageRequest, request: Request = None
+    ):
+        token = request.cookies.get(SESSION_COOKIE) if request is not None else None
+        if token:
+            reply = backend.handle_message(thread_id, body.text, session_token=token)
+        else:
+            reply = backend.handle_message(thread_id, body.text)
         return MessageResponse(thread_id=thread_id, reply=reply)
 
     @app.post(
@@ -274,24 +366,22 @@ def create_app(
         response_model=MessageResponse,
         responses=_ERRORS,
     )
-    def send_decision(thread_id: str, body: DecisionRequest):
-        reply = backend.handle_decision(thread_id, body)
+    def send_decision(
+        thread_id: str, body: DecisionRequest, request: Request = None
+    ):
+        token = request.cookies.get(SESSION_COOKIE) if request is not None else None
+        if token:
+            reply = backend.handle_decision(thread_id, body, session_token=token)
+        else:
+            reply = backend.handle_decision(thread_id, body)
         return MessageResponse(thread_id=thread_id, reply=reply)
 
-    # Apresentação: serve o build do React junto da API (npm run build).
+    # O frontend fica em repositório separado. Este mount só é usado quando um
+    # build estático é injetado explicitamente em create_app(frontend_dist=...).
     if frontend_dist is not None and Path(frontend_dist).is_dir():
         app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
-    # EST-01: Inicialização da checkpoint database
-    target_file = Path(state_file) if state_file is not None else STATE_FILE
-    target_file.parent.mkdir(parents=True, exist_ok=True)
-    init_db(target_file)
-
-    conn = sqlite3.connect(target_file, check_same_thread=False)
-    checkpointer = SqliteSaver(conn)
-    checkpointer.setup()
-    app.state.graph = build_graph(checkpointer)
-
+    app.state.graph = graph
     app.state.checkpointer = checkpointer
     app.state.sqlite_conn = conn
 

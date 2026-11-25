@@ -56,6 +56,27 @@ def init_db(db_path: Optional[Path]= None): # Garante que os dados existam na da
             );
         """)
 
+        # Migração compatível com bancos criados pela EST-01 original. As
+        # colunas novas guardam o vínculo da conversa real e nunca credenciais
+        # em texto puro (apenas o hash do token de sessão).
+        columns = {row[1] for row in cursor.execute("PRAGMA table_info(ui_sessions)")}
+        additions = {
+            "session_token_hash": "TEXT",
+            "character_name": "TEXT",
+            "role": "TEXT NOT NULL DEFAULT 'staff'",
+            "created_at": "TIMESTAMP",
+        }
+        for name, definition in additions.items():
+            if name not in columns:
+                cursor.execute(
+                    f"ALTER TABLE ui_sessions ADD COLUMN {name} {definition}"
+                )
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ui_sessions_token_hash
+            ON ui_sessions(session_token_hash)
+            WHERE session_token_hash IS NOT NULL
+        """)
+
 def save_session(
         thread_id: str,
         character_id: int,
@@ -73,10 +94,17 @@ def save_session(
     with _connect(db_path) as conn:
         cursor = conn.cursor()
 
+        # Atualiza somente o estado da UI, preservando o vínculo/token criado
+        # pela integração real quando a linha já existe.
         cursor.execute("""
-            INSERT OR REPLACE INTO ui_sessions
+            INSERT INTO ui_sessions
             (thread_id, character_id, pending_action, last_write_result, updated_at)
             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(thread_id) DO UPDATE SET
+                character_id = excluded.character_id,
+                pending_action = excluded.pending_action,
+                last_write_result = excluded.last_write_result,
+                updated_at = CURRENT_TIMESTAMP
         """, tuple_data)
 
 def get_session(thread_id: str, db_path: Optional[Path]= None):
@@ -100,6 +128,87 @@ def get_session(thread_id: str, db_path: Optional[Path]= None):
         "pending_action": json.loads(row[1]) if row[1] is not None else None,
         "last_write_result": json.loads(row[2]) if row[2] is not None else None
     }
+
+
+def _session_row(row) -> Optional[dict]:
+    if row is None:
+        return None
+    return {
+        "thread_id": row[0],
+        "character_id": row[1],
+        "character_name": row[2],
+        "role": row[3] or "staff",
+        "session_token_hash": row[4],
+        "pending_action": json.loads(row[5]) if row[5] is not None else None,
+        "last_write_result": json.loads(row[6]) if row[6] is not None else None,
+    }
+
+
+_SESSION_COLUMNS = """
+    thread_id, character_id, character_name, role, session_token_hash,
+    pending_action, last_write_result
+"""
+
+
+def create_ui_session(
+        thread_id: str,
+        character_id: int,
+        character_name: str,
+        session_token_hash: str,
+        db_path: Optional[Path] = None,
+):
+    """Cria o vínculo durável entre thread, personagem e credencial opaca."""
+    with _connect(db_path) as conn:
+        conn.execute(f"""
+            INSERT INTO ui_sessions
+            (thread_id, character_id, character_name, role, session_token_hash,
+             created_at, updated_at)
+            VALUES (?, ?, ?, 'staff', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (thread_id, character_id, character_name, session_token_hash))
+
+
+def get_ui_session(thread_id: str, db_path: Optional[Path] = None) -> Optional[dict]:
+    with _connect(db_path) as conn:
+        row = conn.execute(f"""
+            SELECT {_SESSION_COLUMNS} FROM ui_sessions WHERE thread_id = ?
+        """, (thread_id,)).fetchone()
+    return _session_row(row)
+
+
+def get_ui_session_by_token_hash(
+        session_token_hash: str, db_path: Optional[Path] = None
+) -> Optional[dict]:
+    with _connect(db_path) as conn:
+        row = conn.execute(f"""
+            SELECT {_SESSION_COLUMNS} FROM ui_sessions
+            WHERE session_token_hash = ?
+        """, (session_token_hash,)).fetchone()
+    return _session_row(row)
+
+
+def delete_ui_session(thread_id: str, db_path: Optional[Path] = None) -> None:
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM ui_sessions WHERE thread_id = ?", (thread_id,))
+
+
+def switch_ui_session(
+        old_thread_id: str,
+        new_thread_id: str,
+        character_id: int,
+        character_name: str,
+        session_token_hash: str,
+        db_path: Optional[Path] = None,
+):
+    """Invalida o contexto anterior e grava o novo em uma única transação."""
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM ui_sessions WHERE thread_id = ?", (old_thread_id,))
+        conn.execute("""
+            INSERT INTO ui_sessions
+            (thread_id, character_id, character_name, role, session_token_hash,
+             created_at, updated_at)
+            VALUES (?, ?, ?, 'staff', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (new_thread_id, character_id, character_name, session_token_hash))
+
 
 def create_action_record(
         action_id,
