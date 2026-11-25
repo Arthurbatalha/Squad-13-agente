@@ -120,7 +120,9 @@ class MockChatBackend:
             self._sessions[session.thread_id] = session
             return self._info(session)
 
-    def switch_session(self, thread_id: str, character_id: int) -> SessionInfo:
+    def switch_session(
+        self, thread_id: str, character_id: int, *, session_token: str | None = None
+    ) -> SessionInfo:
         with self._lock:
             previous = self._get(thread_id)
             character = next((c for c in _CHARACTERS if c.id == character_id), None)
@@ -134,12 +136,16 @@ class MockChatBackend:
             self._sessions[session.thread_id] = session
             return self._info(session)
 
-    def get_session(self, thread_id: str) -> SessionInfo:
+    def get_session(
+        self, thread_id: str, *, session_token: str | None = None
+    ) -> SessionInfo:
         with self._lock:
             return self._info(self._get(thread_id))
 
     # ----- conversa ------------------------------------------------------
-    def handle_message(self, thread_id: str, text: str) -> ChatReply:
+    def handle_message(
+        self, thread_id: str, text: str, *, session_token: str | None = None
+    ) -> ChatReply:
         with self._lock:
             session = self._get(thread_id)
             if session.pending is not None:
@@ -157,7 +163,13 @@ class MockChatBackend:
                 )
             return self._route(session, text)
 
-    def handle_decision(self, thread_id: str, request: DecisionRequest) -> ChatReply:
+    def handle_decision(
+        self,
+        thread_id: str,
+        request: DecisionRequest,
+        *,
+        session_token: str | None = None,
+    ) -> ChatReply:
         with self._lock:
             session = self._get(thread_id)
             return self._decide(

@@ -249,3 +249,58 @@ python -m pytest -q tests/test_model_adapter.py
 O teste automatizado usa modelo falso injetado. Ele não comprova chave válida,
 acesso, disponibilidade, cotas ou comportamento real do modelo. A demonstração
 real deve ser autorizada pelo squad e executada com a chave local configurada.
+
+## RAG-01 — conversa integrada
+
+A conversa do React passa a usar o backend real quando `CHAT_BACKEND=real`:
+FastAPI, agente LangChain com checkpoint SQLite, recuperação publicada da
+RAG-03, geração Gemini da RAG-04 e validação da RAG-05. O mock continua
+disponível com `CHAT_BACKEND=mock`.
+
+O cookie `rag01_session` é `HttpOnly`; o banco guarda apenas o hash do token.
+O `thread_id` sozinho não autoriza outra sessão. A troca de personagem cria
+um contexto novo, invalida o anterior e descarta o checkpoint antigo. O
+histórico fica no SQLite e é retomado após reiniciar o backend.
+
+Configuração e exemplos sem segredos estão em
+[.env.example](.env.example) e [docs/RAG-01.md](docs/RAG-01.md). O frontend
+da conversa fica no repositório separado `../Squad-13-frontend`.
+
+Para executar o backend:
+
+```bash
+source .venv/bin/activate
+CHAT_BACKEND=real uvicorn src.api.app:app --reload --port 8000
+```
+
+Em outro terminal, no repositório do frontend:
+
+```bash
+cd ../Squad-13-frontend
+npm ci
+npm run dev
+```
+
+Testes da integração:
+
+```bash
+python -m pytest -q tests/test_rag_graph.py tests/integration/test_graph_resume.py
+python -m pytest -q test tests
+python -m pip check
+```
+
+No repositório do frontend:
+
+```bash
+npm test && npm run build
+```
+
+O backend não serve mais o build do React por padrão; o frontend usa o proxy
+do Vite (`/api` → `http://localhost:8000`) ou uma origem configurada em
+`CORS_ORIGINS`.
+
+Os testes usam SQLite e índice temporários com provedor determinístico. O
+ensaio com Gemini real depende de chave, cota e índice publicado; sem esses
+recursos ele não é declarado aprovado. Limites de histórico, iterações,
+tentativas, timeout e catálogo estão documentados em
+[docs/RAG-01.md](docs/RAG-01.md).
