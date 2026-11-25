@@ -6,18 +6,20 @@ O navegador só fala com estas rotas. Tokens do GLPI, modelo de embeddings e
 regras de autorização ficam no servidor.
 """
 
+import asyncio
 import logging
 import os
 import sqlite3
-from pathlib import Path
-from typing import Optional
 import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Callable, Optional
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.session_store import save_session
+from src.session_store import init_db
 from src.agent_core import build_graph
 from src.config import STATE_FILE
 
@@ -39,12 +41,15 @@ from src.api.schemas import (
     ErrorDetail,
     ErrorResponse,
     HealthResponse,
+    IndexStatusResponse,
     MessageRequest,
     MessageResponse,
     SessionInfo,
 )
+from src.rag.sync_runtime import build_default_article_sync_coordinator
 
 logger = logging.getLogger(__name__)
+
 
 DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -85,10 +90,50 @@ def _error_json(
     return JSONResponse(status_code=status_code, content=body.model_dump())
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        if app.state.sync_coordinator_factory is not None:
+            try:
+                coordinator = app.state.sync_coordinator_factory()
+                app.state.article_sync_coordinator = coordinator
+                app.state.article_sync_ledger = coordinator.ledger
+                app.state.article_index_store = getattr(
+                    coordinator.engine, "store", None
+                )
+                run = await asyncio.to_thread(coordinator.run, "startup")
+                app.state.article_sync_run = run
+                if run.status == "failed":
+                    app.state.article_index_state = (
+                        "stale" if run.active_generation else "unavailable"
+                    )
+                    logger.warning(
+                        "Article index startup sync failed (%s).", run.error_code
+                    )
+                else:
+                    app.state.article_index_state = (
+                        "available" if run.active_generation else "unavailable"
+                    )
+            except Exception as exc:
+                # A failed initial sync must not prevent the API from reporting
+                # index unavailability or serving routes that do not need it.
+                app.state.article_sync_run = None
+                app.state.article_index_state = "unavailable"
+                logger.warning(
+                    "Article index startup could not be initialized (%s).",
+                    type(exc).__name__,
+                )
+        yield
+    finally:
+        app.state.sqlite_conn.close()
+
+
 def create_app(
     backend: Optional[ChatBackend] = None,
     cors_origins: Optional[list[str]] = None,
     frontend_dist: Optional[Path] = FRONTEND_DIST,
+    state_file: Optional[Path] = None,
+    sync_coordinator_factory: Optional[Callable] = None,
 ) -> FastAPI:
     backend = backend or build_backend()
     origins = cors_origins
@@ -96,7 +141,13 @@ def create_app(
         raw = os.getenv("CORS_ORIGINS", DEFAULT_CORS_ORIGINS)
         origins = [o.strip() for o in raw.split(",") if o.strip()]
 
-    app = FastAPI(title="Chatbot GLPI — API", version="0.1.0")
+    app = FastAPI(title="Chatbot GLPI — API", version="0.1.0", lifespan=lifespan)
+    app.state.sync_coordinator_factory = sync_coordinator_factory
+    app.state.article_sync_run = None
+    app.state.article_index_state = "unavailable"
+    app.state.article_sync_coordinator = None
+    app.state.article_sync_ledger = None
+    app.state.article_index_store = None
 
     # Origem restrita ao front; sem credenciais/cookies.
     app.add_middleware(
@@ -133,6 +184,65 @@ def create_app(
     @app.get("/api/health", response_model=HealthResponse)
     def health():
         return HealthResponse(status="ok", adapter=backend.adapter)
+
+    @app.get("/api/index/status", response_model=IndexStatusResponse)
+    def article_index_status():
+        ledger = app.state.article_sync_ledger
+        if ledger is None:
+            return IndexStatusResponse(state="unavailable")
+
+        latest = ledger.latest()
+        latest_success = ledger.latest_success()
+        recorded_generation = latest.active_generation if latest else None
+        store = app.state.article_index_store
+        active_info = None
+        active_generation = None
+        if store is not None:
+            try:
+                with store.open_active() as active:
+                    active_generation = active.generation_id
+                    active_info = active.info
+            except Exception:
+                active_generation = None
+                active_info = None
+
+        if active_generation is None:
+            state = "unavailable"
+        elif latest and (
+            latest.status == "failed"
+            or latest.source_api_status == "unavailable"
+            or (
+                latest.status != "running"
+                and recorded_generation != active_generation
+            )
+        ):
+            state = "stale"
+        else:
+            state = "available"
+
+        return IndexStatusResponse(
+            state=state,
+            active_generation=active_generation,
+            last_attempt_at=latest.started_at if latest else None,
+            last_attempt_result=latest.status if latest else None,
+            last_success_at=latest_success.finished_at if latest_success else None,
+            last_published_at=(
+                latest_success.published_at if latest_success else None
+            ),
+            source_api_status=(
+                latest.source_api_status if latest else "unknown"
+            ),
+            index_config=(latest_success.index_config if latest_success else None),
+            sources_total=(
+                active_info.source_count if active_info is not None
+                else latest_success.sources_total if latest_success else None
+            ),
+            chunks_total=(
+                active_info.chunk_count if active_info is not None
+                else latest_success.chunks_total if latest_success else None
+            ),
+            error_code=latest.error_code if latest else None,
+        )
 
     @app.get("/api/characters", response_model=CharactersResponse)
     def characters():
@@ -172,10 +282,20 @@ def create_app(
     if frontend_dist is not None and Path(frontend_dist).is_dir():
         app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
-    conn = sqlite3.connect(STATE_FILE, check_same_thread=False)
-    app.state.graph = build_graph(SqliteSaver(conn))
+    # EST-01: Inicialização da checkpoint database
+    target_file = Path(state_file) if state_file is not None else STATE_FILE
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    init_db(target_file)
+
+    conn = sqlite3.connect(target_file, check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
+    checkpointer.setup()
+    app.state.graph = build_graph(checkpointer)
+
+    app.state.checkpointer = checkpointer
+    app.state.sqlite_conn = conn
 
     return app
 
 
-app = create_app()
+app = create_app(sync_coordinator_factory=build_default_article_sync_coordinator)

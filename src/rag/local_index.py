@@ -89,6 +89,19 @@ def _fsync_dir(path: Path) -> None:
         os.close(descriptor)
 
 
+def _rename_candidate(temporary: Path, final: Path) -> None:
+    """A pasta tem um destino novo no mesmo volume. Um bloqueio no Windows pode ser breve."""
+    for delay in (0.025, 0.05, 0.1, 0.2, 0.4):
+        try:
+            os.rename(temporary, final)
+            return
+        except OSError as exc:
+            if getattr(exc, "winerror", None) not in (5, 32, 33):
+                raise
+            time.sleep(delay)
+    os.rename(temporary, final)
+
+
 def _json_bytes(value) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, indent=1).encode("utf-8")
 
@@ -196,8 +209,8 @@ class LocalIndexStore:
             generation_id = self._new_generation_id()
             temporary = self.directory / f".tmp-{generation_id}"
             final = self._generation_dir(generation_id)
+            temporary.mkdir()
             try:
-                temporary.mkdir()
                 manifest = {
                     "format_version": FORMAT_VERSION,
                     "generation_id": generation_id,
@@ -216,12 +229,15 @@ class LocalIndexStore:
                 _write_file(temporary / "catalog.json", catalog_data)
                 _write_file(temporary / "manifest.json", _json_bytes(manifest))
                 _fsync_dir(temporary)
-                os.replace(temporary, final)
+                _rename_candidate(temporary, final)
+            except BaseException:
+                shutil.rmtree(temporary, ignore_errors=True)
+                raise
+            try:
                 _fsync_dir(self.directory)
                 # A candidata só existe para leitores se reler íntegra.
                 self._load(generation_id)
             except BaseException:
-                shutil.rmtree(temporary, ignore_errors=True)
                 shutil.rmtree(final, ignore_errors=True)
                 raise
             return self._info_from_manifest(manifest)

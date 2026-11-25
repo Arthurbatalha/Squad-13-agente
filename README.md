@@ -55,7 +55,7 @@ Na raiz do repositório, crie um ambiente virtual e instale as dependências
 de teste, sem baixar a stack completa nem um modelo de IA:
 
 ```powershell
-py -m venv .venv
+py -3.14 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install pytest python-dotenv tzdata
 ```
 
@@ -87,57 +87,47 @@ mas a integração real com GLPI e a busca semântica dependem da instalação
 completa e serão validadas separadamente. A presença dos testes acima não
 comprova integração real nem execução com Gemini.
 
-## Dependências fixadas e instalação limpa (GLPI-01)
+## Ambiente Python do projeto
 
-- Pré-requisitos **fora do pip**: Python 3.13 (64 bits) para a validação
-  recomendada em Windows; Docker Desktop + Docker Compose para iniciar o
-  laboratório GLPI. O Docker não é necessário para os testes unitários.
-- `requirements.txt` contém **versões candidatas fixadas** para as
-  dependências do protótipo e da stack selecionada no Planning Refactor.
-  Inclui `requests`, `python-dotenv`, `sentence-transformers`, `html2text`,
-  `chromadb`, `langchain`, `langgraph`, `langchain-google-genai`,
-  `langgraph-checkpoint-sqlite`, `pytest`, `scikit-learn` e `tzdata`.
-- `os`, `pathlib`, `datetime`, `zoneinfo` e `sqlite3` fazem parte da
-  biblioteca padrão do Python: não entram na lista pip. O SQLite é
-  destinado a *checkpoints do LangGraph*, não a substituir o Chroma.
-- As versões **não estão validadas como conjunto** até concluir os passos
-  abaixo em um ambiente novo e registrar os resultados. A instalação
-  completa pode ser demorada porque SentenceTransformers depende de Torch.
+Use CPython **3.14** de 64 bits. A série está registrada em `.python-version`.
+Na raiz do projeto, crie e ative o ambiente virtual.
 
-Na raiz do repositório, no terminal **PowerShell** do Windows:
+**Linux e macOS**
 
-```powershell
-py -m venv venv
-.\venv\Scripts\python.exe -m pip install -r requirements.txt
-.\venv\Scripts\python.exe -m pip check
-.\venv\Scripts\python.exe scripts/verify_environment.py
-.\venv\Scripts\python.exe -m pytest -q test/test_contracts.py test/test_config.py
-.\venv\Scripts\python.exe --version
+```bash
+python3.14 -m venv .venv
+source .venv/bin/activate
 ```
 
-`venv/` está no `.gitignore` e não deve ser enviado ao GitHub.
-Não versionar `.env`, senhas, tokens ou arquivos baixados do modelo.
-Guarde a saída de `pip check`, do verificador de ambiente, da versão do
-Python e dos testes como evidência da task. O verificador importa as
-bibliotecas, mas não baixa modelos nem conecta ao GLPI ou ao Gemini.
+**Windows (PowerShell)**
 
-## Contratos da busca e limites da etapa
+```powershell
+py -3.14 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
-A implementação vigente de embeddings da Alternativa C está em
-[`docs/ING-02.md`](docs/ING-02.md): MiniLM com revisão fixa, preparação ING-01
-e corpus reutilizável em memória. As referências anteriores a migração E5
-não definem o escopo da ING-02 atual. Persistência continua na ING-03.
+Com o ambiente ativo, instale e confira as dependências do backend e dos testes.
 
-Consulte [`docs/contratos-glpi01.md`](docs/contratos-glpi01.md) para o
-formato interno atual (`id`, `title`, `content`, `score`), a diferença em
-relação aos campos da API e as exigências futuras aprovadas para Chroma/E5,
-chunks e referências. O frontend é obrigatório no MVP aprovado, mas não
-está sendo implementado nesta task de ambiente.
+```bash
+python -m pip install -r requirements.txt -r requirements-api.txt
+python --version
+python -m pip check
+python scripts/verify_environment.py
+python -m pytest -q test tests
+```
 
-**Critério de conclusão:** testes com mocks + instalação limpa e imports
-validados + documentação revisada + revisão e PR acordado para `dev_v2`.
-A integração real com GLPI e o ensaio com Gemini exigem validação em suas
-respectivas entregas; não afirmar que ocorreram apenas com esses testes.
+O verificador confere a série do Python, os pacotes fixados e seus imports.
+Os pesos do MiniLM são carregados sob demanda. O laboratório GLPI usa Docker
+e Docker Compose.
+
+## Busca na Alternativa C
+
+A ING-01 prepara o HTML com html2text. A ING-02 usa MiniLM multilíngue em CPU
+para gerar vetores normalizados de 384 dimensões. A ING-03 publica uma matriz
+e um catálogo locais por geração. A RAG-03 consulta a geração publicada,
+aplica o escopo do técnico e vetoriza somente a pergunta. O SQLite da API
+armazena o estado das sessões e os checkpoints. Detalhes em
+[ING-02](docs/ING-02.md), [ING-03](docs/ING-03.md) e [RAG-03](docs/RAG-03.md).
 
 ## Diagnóstico do laboratório — GLPI-05
 
