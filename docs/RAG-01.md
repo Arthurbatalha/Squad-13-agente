@@ -23,7 +23,7 @@ escrita do GLPI continuam desabilitadas.
 ## 2. Arquitetura e ponto de entrada
 
 ```
-React (repositório ../Squad-13-frontend)
+React (repositório Squad-13-frontend)
   └── fetch /api, credentials: include
         └── FastAPI (src/api/app.py)
               ├── cookie rag01_session → hash SHA-256 em ui_sessions
@@ -38,6 +38,10 @@ React (repositório ../Squad-13-frontend)
                     ├── ui_sessions (thread, personagem, hash do token)
                     └── checkpoints do LangGraph
 ```
+
+O frontend está em
+https://github.com/Anthonnyjda-dev/Squad-13-frontend e não é servido pelo
+backend por padrão.
 
 O ponto de entrada é `src/api/app.py:create_app()`. Ele:
 
@@ -66,8 +70,8 @@ um provedor determinístico e um índice temporário.
 | `src/api/backend.py` | Protocolo do backend, preservando o mock. |
 | `src/api/mock_backend.py` | Backend de demonstração, agora com `session_token` opcional. |
 | `src/config.py` | Limites de histórico, iterações, tentativas e timeout. |
-| `../Squad-13-frontend/src/api.js` | `credentials: "include"` e nenhum segredo no navegador. |
-| `../Squad-13-frontend/src/useConversation.js` | Mensagens de erro sanitizadas e descarte de respostas atrasadas. |
+| [Squad-13-frontend/src/api.js](https://github.com/Anthonnyjda-dev/Squad-13-frontend/blob/main/src/api.js) | `credentials: "include"` e nenhum segredo no navegador. |
+| [Squad-13-frontend/src/useConversation.js](https://github.com/Anthonnyjda-dev/Squad-13-frontend/blob/main/src/useConversation.js) | Mensagens de erro sanitizadas e descarte de respostas atrasadas. |
 | `tests/rag01_fixtures.py` | Índice real temporário, SQLite real e provedor fake. |
 | `tests/test_rag_graph.py` | Cenários de grafo, política, sessão e segurança. |
 | `tests/integration/test_graph_resume.py` | HTTP real com cookie e retomada após reinício. |
@@ -214,8 +218,11 @@ source .venv/bin/activate
 CHAT_BACKEND=real uvicorn src.api.app:app --reload --port 8000
 ```
 
-O frontend fica no repositório separado `../Squad-13-frontend`. Em
-desenvolvimento, o proxy `/api` encaminha para a porta 8000:
+O frontend fica no repositório separado
+[Squad-13-frontend](https://github.com/Anthonnyjda-dev/Squad-13-frontend).
+Nos exemplos abaixo, ele é clonado como repositório irmão em
+`../Squad-13-frontend`. Em desenvolvimento, o proxy `/api` encaminha para a
+porta 8000:
 
 ```bash
 cd ../Squad-13-frontend

@@ -1,8 +1,9 @@
 # UI-01 — Contrato front–backend
 
 > **Nota (RAG-01):** o frontend foi movido para o repositório separado
-> `../Squad-13-frontend`. Os caminhos `frontend/` abaixo descrevem o estado
-> histórico da UI-01; os comandos atuais estão no README do novo repositório.
+> [Squad-13-frontend](https://github.com/Anthonnyjda-dev/Squad-13-frontend).
+> Os caminhos `frontend/` abaixo descrevem o estado histórico da UI-01; os
+> comandos atuais estão no README do novo repositório.
 
 > Estado: implementado e **executado em 08/11/2026 com o adaptador simulado
 > (mock)**. Nada foi testado contra GLPI real, índice de recuperação ou Gemini.

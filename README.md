@@ -264,7 +264,10 @@ histórico fica no SQLite e é retomado após reiniciar o backend.
 
 Configuração e exemplos sem segredos estão em
 [.env.example](.env.example) e [docs/RAG-01.md](docs/RAG-01.md). O frontend
-da conversa fica no repositório separado `../Squad-13-frontend`.
+da conversa fica no repositório separado
+[Squad-13-frontend](https://github.com/Anthonnyjda-dev/Squad-13-frontend).
+Nos exemplos abaixo, ele é clonado como repositório irmão em
+`../Squad-13-frontend`.
 
 Para executar o backend:
 
