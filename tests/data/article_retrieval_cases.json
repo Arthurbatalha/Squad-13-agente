@@ -1,0 +1,37 @@
+{
+  "clarification_cases": [
+    {"reference": 5, "query": "Como configuro a VPN?", "action": "clarify_without_retrieval"},
+    {"reference": 6, "query": "Como redefino minha senha?", "action": "clarify_without_retrieval"},
+    {"reference": 7, "query": "Como instalo uma impressora?", "action": "clarify_without_retrieval"}
+  ],
+  "retrieval_cases": [
+    {"id": "q01_base", "reference": 1, "split": "calibration", "query": "Como configuro a VPN corporativa no Windows?", "expected_source_titles": ["Configurar a VPN corporativa no Windows"]},
+    {"id": "q01_paraphrase", "reference": 1, "split": "holdout", "query": "Preciso conectar a VPN da empresa no meu computador Windows.", "expected_source_titles": ["Configurar a VPN corporativa no Windows"]},
+    {"id": "q02_base", "reference": 2, "split": "calibration", "query": "Qual o tamanho mínimo da senha de rede?", "expected_source_titles": ["Redefinir a senha de rede pelo autoatendimento"]},
+    {"id": "q02_paraphrase", "reference": 2, "split": "holdout", "query": "Quantos caracteres precisa ter minha senha corporativa?", "expected_source_titles": ["Redefinir a senha de rede pelo autoatendimento"]},
+    {"id": "q03_base", "reference": 3, "split": "calibration", "query": "Como instalo a impressora do meu andar?", "expected_source_titles": ["Instalar impressora de rede no Windows"]},
+    {"id": "q03_paraphrase", "reference": 3, "split": "holdout", "query": "Como adiciono no Windows a impressora compartilhada do meu setor?", "expected_source_titles": ["Instalar impressora de rede no Windows"]},
+    {"id": "q04_base", "reference": 4, "split": "calibration", "query": "O que faço quando a caixa de e-mail enche?", "expected_source_titles": ["Caixa de e-mail cheia e mensagens não chegam"]},
+    {"id": "q04_paraphrase", "reference": 4, "split": "holdout", "query": "Parei de receber mensagens porque meu correio está sem espaço.", "expected_source_titles": ["Caixa de e-mail cheia e mensagens não chegam"]},
+    {"id": "q05_windows", "reference": 5, "split": "calibration", "query": "Como configuro a VPN? Windows", "expected_source_titles": ["Configurar a VPN corporativa no Windows"]},
+    {"id": "q05_windows_paraphrase", "reference": 5, "split": "holdout", "query": "Uso Windows; qual é o procedimento para conectar à VPN?", "expected_source_titles": ["Configurar a VPN corporativa no Windows"]},
+    {"id": "q05_macos", "reference": 5, "split": "calibration", "query": "Como configuro a VPN? macOS", "expected_source_titles": ["Configurar a VPN corporativa no macOS"]},
+    {"id": "q05_macos_paraphrase", "reference": 5, "split": "holdout", "query": "Meu computador é um Mac. Como conecto à VPN corporativa?", "expected_source_titles": ["Configurar a VPN corporativa no macOS"]},
+    {"id": "q06_self_service", "reference": 6, "split": "calibration", "query": "Como redefino minha senha? Ainda tenho acesso ao e-mail e ao segundo fator.", "expected_source_titles": ["Redefinir a senha de rede pelo autoatendimento"]},
+    {"id": "q06_self_service_paraphrase", "reference": 6, "split": "holdout", "query": "Consigo entrar no e-mail e tenho o token; como troco a senha da rede?", "expected_source_titles": ["Redefinir a senha de rede pelo autoatendimento"]},
+    {"id": "q06_support", "reference": 6, "split": "calibration", "query": "Como redefino minha senha? Perdi o acesso ao e-mail e ao segundo fator.", "expected_source_titles": ["Redefinir a senha de rede com o suporte"]},
+    {"id": "q06_support_paraphrase", "reference": 6, "split": "holdout", "query": "Não consigo acessar meu e-mail nem o token. Como recupero a senha com ajuda?", "expected_source_titles": ["Redefinir a senha de rede com o suporte"]},
+    {"id": "q07_network", "reference": 7, "split": "calibration", "query": "Como instalo uma impressora? De rede, a do meu andar.", "expected_source_titles": ["Instalar impressora de rede no Windows"]},
+    {"id": "q07_network_paraphrase", "reference": 7, "split": "holdout", "query": "Quero conectar à fila compartilhada do servidor de impressão.", "expected_source_titles": ["Instalar impressora de rede no Windows"]},
+    {"id": "q07_usb", "reference": 7, "split": "calibration", "query": "Como instalo uma impressora? USB local.", "expected_source_titles": ["Instalar impressora USB local no Windows"]},
+    {"id": "q07_usb_paraphrase", "reference": 7, "split": "holdout", "query": "A impressora fica ligada diretamente ao meu computador por cabo USB; como configuro?", "expected_source_titles": ["Instalar impressora USB local no Windows"]},
+    {"id": "q17_base", "reference": 17, "split": "calibration", "query": "Qual é a política de home office da empresa?", "expected_source_titles": []},
+    {"id": "q17_paraphrase", "reference": 17, "split": "holdout", "query": "Quantos dias por semana posso trabalhar de casa?", "expected_source_titles": []},
+    {"id": "q18_base", "reference": 18, "split": "calibration", "query": "Quanto custa a licença do ERP?", "expected_source_titles": []},
+    {"id": "q18_paraphrase", "reference": 18, "split": "holdout", "query": "Qual é o preço que a empresa paga pelo sistema ERP?", "expected_source_titles": []},
+    {"id": "q19_base", "reference": 19, "split": "calibration", "query": "Quem é o diretor de tecnologia?", "expected_source_titles": []},
+    {"id": "q19_paraphrase", "reference": 19, "split": "holdout", "query": "Diga o nome de quem lidera a área de tecnologia.", "expected_source_titles": []},
+    {"id": "q20_base", "reference": 20, "split": "calibration", "query": "Como solicito férias?", "expected_source_titles": []},
+    {"id": "q20_paraphrase", "reference": 20, "split": "holdout", "query": "Qual é o processo para marcar minhas férias?", "expected_source_titles": []}
+  ]
+}
