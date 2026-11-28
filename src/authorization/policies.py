@@ -17,6 +17,9 @@ TOOL_ROLES = {
     "get_ticket": ROLES,
     "list_tickets": ROLES,
     "ticket_statistics": ROLES,
+    "query_detail": ROLES,
+    "query_list": ROLES,
+    "query_statistics": ROLES,
     "similar_cases": ROLES,
     "search_articles": ROLES,
 }
